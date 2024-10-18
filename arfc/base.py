@@ -35,7 +35,7 @@ class ARModel(BaseEstimator):
         return score
 
     def tsplit(
-        self: T, X: np.ndarray, groups: np.ndarray | None
+        self: T, X: np.ndarray, groups: np.ndarray | None = None
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if groups is None:
             X_pre, X_post = tsplit(X, order=self.order, lag=self.lag)
