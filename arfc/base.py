@@ -29,16 +29,19 @@ class ARModel(BaseEstimator):
         return X_pred
 
     def score(self: T, X: np.ndarray, groups: np.ndarray | None = None) -> float:
-        X_pres, X_post = self.tsplit(X, groups=groups)
+        X_pres, X_post, _ = self.tsplit(X, groups=groups)
         X_pred = self.predict(X_pres)
         score = r2_score(X_post, X_pred)
         return score
 
     def tsplit(
         self: T, X: np.ndarray, groups: np.ndarray | None
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if groups is None:
             X_pre, X_post = tsplit(X, order=self.order, lag=self.lag)
+            split_groups = None
         else:
-            X_pre, X_post, _ = group_tsplit(X, groups, order=self.order, lag=self.lag)
-        return X_pre, X_post
+            X_pre, X_post, split_groups = group_tsplit(
+                X, groups, order=self.order, lag=self.lag
+            )
+        return X_pre, X_post, split_groups

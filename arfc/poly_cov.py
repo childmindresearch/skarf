@@ -39,7 +39,7 @@ class PolyCovARModel(ARModel):
         mat = self.get_precision() if self.use_precision else self.get_covariance()
         mat = self._preprocess_covariance(mat)
 
-        X_pres, X_post = self.tsplit(X, groups=groups)
+        X_pres, X_post, _ = self.tsplit(X, groups=groups)
 
         # pre-compute polynomial terms
         # (ar_order * poly_order, tpts, dim)

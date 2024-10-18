@@ -5,15 +5,9 @@ def group_tsplit(
     X: np.ndarray, groups: np.ndarray, order: int = 1, lag: int = 1
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     X_pres, X_post, split_groups = [], [], []
-    
-    uniq_groups, uniq_index = np.unique(groups, return_index=True)
-    # preserve original order of groups
-    group_order = np.argsort(uniq_index)
 
-    for group in uniq_groups[group_order]:
-        mask = groups == group
-        assert _check_contiguous_mask(mask), "groups are not temporally contiguous"
-
+    for group, mask in iter_groups(groups) :
+        assert is_contiguous(mask), "groups are not temporally contiguous"
         Xi = X[mask]
         Xi_pres, Xi_post = tsplit(Xi, order=order, lag=lag)
         X_pres.append(Xi_pres)
@@ -26,7 +20,15 @@ def group_tsplit(
     return X_pres, X_post, split_groups
 
 
-def _check_contiguous_mask(mask: np.ndarray) -> bool:
+def iter_groups(groups: np.ndarray):
+    uniq_groups, uniq_index = np.unique(groups, return_index=True)
+    group_order = np.argsort(uniq_index)
+    for group in uniq_groups[group_order]:
+        mask = groups == group
+        yield group, mask
+
+
+def is_contiguous(mask: np.ndarray) -> bool:
     """Check if a 1d boolean mask is contiguous."""
     indices, = mask.nonzero()
     if len(indices) < 2:
