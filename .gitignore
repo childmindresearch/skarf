@@ -1,0 +1,37 @@
+.DS_Store
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Vim
+*.swp
+
+# Distribution / packaging
+*.egg-info/
+dist
+build
+
+# VScode IDE
+.vscode/
+
+# Local scratch
+.scratch
+.trash
+
+# Jupyter
+.ipynb_checkpoints
+
+# Octave
+octave-workspace
+
+# SLURM
+slurm-*
+
+# Environment
+.venv
+.env
+
+# Data
+data/
+output/
