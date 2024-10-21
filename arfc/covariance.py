@@ -73,10 +73,7 @@ class CovarianceARModel(ARModel):
 
         armats = np.stack(
             [
-                sum(
-                    coef[step, deg - 1] * (mat**deg)
-                    for deg in range(1, self.degree + 1)
-                )
+                sum(coef[step, ii] * pmat for ii, pmat in enumerate(pow_mats))
                 for step in range(self.order)
             ]
         )
