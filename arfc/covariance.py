@@ -9,10 +9,10 @@ from sklearn.utils.validation import check_is_fitted
 from .base import ARModel
 
 
-T = TypeVar("T", bound="PolyCovARModel")
+T = TypeVar("T", bound="CovarianceARModel")
 
 
-class PolyCovARModel(ARModel):
+class CovarianceARModel(ARModel):
     coef_: np.ndarray
     rank_: int
     singular_values_: np.ndarray

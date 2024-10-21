@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from sklearn.covariance import EmpiricalCovariance
 
-from arfc.poly_cov import PolyCovARModel, FrozenCovariance
+from arfc.covariance import CovarianceARModel, FrozenCovariance
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +47,7 @@ def groups() -> np.ndarray:
         (False, 3, 4, 2),
     ]
 )
-def test_poly_cov_ar_model(
+def test_covariance_ar_model(
     random_data: np.ndarray,
     groups: np.ndarray,
     use_precision: bool,
@@ -56,7 +56,7 @@ def test_poly_cov_ar_model(
     lag: int,
 ):
     cov = EmpiricalCovariance()
-    model = PolyCovARModel(
+    model = CovarianceARModel(
         cov,
         use_precision=use_precision,
         degree=degree,
@@ -68,12 +68,12 @@ def test_poly_cov_ar_model(
     model.score(random_data, groups=groups)
 
 
-def test_poly_cov_ar_model_ridge(
+def test_covariance_ar_model_ridge(
     random_data: np.ndarray,
 ):
     cov = EmpiricalCovariance()
-    base_model = PolyCovARModel(cov, order=2)
-    ridge_model = PolyCovARModel(cov, order=2, alpha=1e5)
+    base_model = CovarianceARModel(cov, order=2)
+    ridge_model = CovarianceARModel(cov, order=2, alpha=1e5)
 
     base_model.fit(random_data)
     ridge_model.fit(random_data)
@@ -84,10 +84,10 @@ def test_poly_cov_ar_model_ridge(
     assert ridge_ar_l2 < 1e-3 < base_ar_l2
 
 
-def test_poly_cov_ar_model_recovery(orth_mat_data: tuple[np.ndarray, np.ndarray]):
+def test_covariance_ar_model_recovery(orth_mat_data: tuple[np.ndarray, np.ndarray]):
     A, orth_data = orth_mat_data
     cov = FrozenCovariance(A.T)
-    model = PolyCovARModel(cov, with_diagonal=True, refit_cov=False)
+    model = CovarianceARModel(cov, with_diagonal=True, refit_cov=False)
     
     model.fit(orth_data)
     score = model.score(orth_data)
