@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from sklearn.linear_model import LinearRegression 
+from sklearn.linear_model import LinearRegression
 
 from arfc.linear_model import LinearARModel
 
@@ -12,7 +12,7 @@ from arfc.linear_model import LinearARModel
         (3, 2, True, False),
         (3, 1, True, True),
         (3, 1, False, True),
-    ]
+    ],
 )
 def test_linear_ar_model(
     random_data: np.ndarray,
@@ -41,7 +41,7 @@ def test_linear_ar_model(
         (True, False),
         (True, True),
         (False, True),
-    ]
+    ],
 )
 def test_linear_ar_model_predict(
     random_data: np.ndarray,
@@ -69,7 +69,7 @@ def test_linear_ar_model_recovery(orth_mat_data: tuple[np.ndarray, np.ndarray]):
     A, orth_data = orth_mat_data
     lin = LinearRegression(fit_intercept=False)
     model = LinearARModel(lin)
-    
+
     model.fit(orth_data)
     score = model.score(orth_data)
     assert np.isclose(score, 1.0)

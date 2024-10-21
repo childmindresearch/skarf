@@ -48,11 +48,12 @@ class CovarianceARModel(ARModel):
         X_pres, X_post, _ = self.tsplit(X, groups=groups)
 
         # pre-compute polynomial ar terms
-        pow_mats = np.stack([mat ** deg for deg in range(1, self.degree + 1)])
+        pow_mats = np.stack([mat**deg for deg in range(1, self.degree + 1)])
         A = np.stack(
             [
                 (X_pres[:, step] @ pmat.T).flatten()
-                for step in range(self.order) for pmat in pow_mats
+                for step in range(self.order)
+                for pmat in pow_mats
             ],
             axis=-1,
         )
@@ -73,7 +74,7 @@ class CovarianceARModel(ARModel):
         armats = np.stack(
             [
                 sum(
-                    coef[step, deg - 1] * (mat ** deg)
+                    coef[step, deg - 1] * (mat**deg)
                     for deg in range(1, self.degree + 1)
                 )
                 for step in range(self.order)
@@ -97,10 +98,10 @@ class CovarianceARModel(ARModel):
             isinstance(covariance, np.ndarray)
             and covariance.ndim == 2
             and covariance.shape[0] == covariance.shape[1]
-        ), f"covariance matrix not valid"
+        ), "covariance matrix not valid"
 
         mat = covariance.copy()
-        mat[np.isnan(mat)] = 0.0    # ignore NaN
+        mat[np.isnan(mat)] = 0.0  # ignore NaN
         if not self.with_diagonal:
             np.fill_diagonal(mat, 0.0)  # ignore diagonal
         mat = mat / max(np.max(np.abs(mat)), 1e-4)  # scale values

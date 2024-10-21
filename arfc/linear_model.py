@@ -34,13 +34,11 @@ class LinearARModel(ARModel):
         X_pres, X_post, _ = self.tsplit(X, groups=groups)
 
         if self.per_target:
-            estimators = [
-                self._fit_single(X_pres, X_post, ii) for ii in range(dim)
-            ]
+            estimators = [self._fit_single(X_pres, X_post, ii) for ii in range(dim)]
             coef = np.stack([estimator.coef_ for estimator in estimators])
         else:
             estimator = self._fit_batch(X_pres, X_post)
-            coef = estimator.coef_ 
+            coef = estimator.coef_
 
         # coef: (dim, order * dim)
         armats = np.ascontiguousarray(
@@ -55,7 +53,9 @@ class LinearARModel(ARModel):
         self.armats_ = armats
         return self
 
-    def _fit_single(self: T, X_pres: np.ndarray, X_post: np.ndarray, index: int) -> LinearRegression:
+    def _fit_single(
+        self: T, X_pres: np.ndarray, X_post: np.ndarray, index: int
+    ) -> LinearRegression:
         estimator = clone(self.estimator)
         if not self.with_diagonal:
             X_pres = X_pres.copy()
@@ -79,7 +79,8 @@ class LinearARModel(ARModel):
 
         if self.per_target:
             X_pred = np.stack(
-                [self._predict_single(X_pres, ii) for ii in range(dim)], axis=-1,
+                [self._predict_single(X_pres, ii) for ii in range(dim)],
+                axis=-1,
             )
         else:
             X_pred = self._predict_batch(X_pres)

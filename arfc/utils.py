@@ -6,7 +6,7 @@ def group_tsplit(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     X_pres, X_post, split_groups = [], [], []
 
-    for group, mask in iter_groups(groups) :
+    for group, mask in iter_groups(groups):
         assert is_contiguous(mask), "groups are not temporally contiguous"
         Xi = X[mask]
         Xi_pres, Xi_post = tsplit(Xi, order=order, lag=lag)
@@ -30,7 +30,7 @@ def iter_groups(groups: np.ndarray):
 
 def is_contiguous(mask: np.ndarray) -> bool:
     """Check if a 1d boolean mask is contiguous."""
-    indices, = mask.nonzero()
+    (indices,) = mask.nonzero()
     if len(indices) < 2:
         return True
     max_diff = np.max(np.diff(indices))
@@ -38,16 +38,18 @@ def is_contiguous(mask: np.ndarray) -> bool:
 
 
 def tsplit(
-    X: np.ndarray, order: int = 1, lag: int = 1,
+    X: np.ndarray,
+    order: int = 1,
+    lag: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
     assert len(X) > 2 * (lag + order), f"timeseries too short for {order=} {lag=}"
 
     # X_pres: (n_timepoints, order, n_features)
     length = len(X) - lag - order + 1
-    X_pres = [X[start: start + length] for start in range(order)]
+    X_pres = [X[start : start + length] for start in range(order)]
     X_pres = np.stack(X_pres, axis=1)
 
     # X_post: (n_timepoints, n_features)
     start = order - 1 + lag
-    X_post = X[start: start + length]
+    X_post = X[start : start + length]
     return X_pres, X_post

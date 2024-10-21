@@ -13,7 +13,7 @@ from arfc.covariance import CovarianceARModel, FrozenCovariance
         (False, 1, 1, 1),
         (False, 3, 4, 1),
         (False, 3, 4, 2),
-    ]
+    ],
 )
 def test_covariance_ar_model(
     random_data: np.ndarray,
@@ -56,7 +56,7 @@ def test_covariance_ar_model_recovery(orth_mat_data: tuple[np.ndarray, np.ndarra
     A, orth_data = orth_mat_data
     cov = FrozenCovariance(A)
     model = CovarianceARModel(cov, with_diagonal=True, refit_cov=False)
-    
+
     model.fit(orth_data)
     score = model.score(orth_data)
     assert np.isclose(score, 1.0)
