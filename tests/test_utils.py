@@ -4,25 +4,6 @@ import pytest
 import arfc.utils as ut
 
 
-@pytest.fixture(scope="module")
-def rng() -> np.random.Generator:
-    return np.random.default_rng(42)
-
-
-@pytest.fixture(scope="module")
-def random_data(rng: np.random.Generator) -> np.ndarray:
-    X = rng.normal(size=(256, 64))
-    return X
-
-
-@pytest.fixture(scope="module")
-def groups() -> np.ndarray:
-    groups = np.concatenate(
-        [np.full((100,), 3, dtype=np.int64), np.full((156,), 1, dtype=np.int64)],
-    )
-    return groups
-
-
 @pytest.mark.parametrize(
     "order,lag",
     [

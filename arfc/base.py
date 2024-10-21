@@ -25,7 +25,9 @@ class ARModel(BaseEstimator):
         check_is_fitted(self)
         assert X_pres.ndim == 3 and X_pres.shape[1] == self.order, "invalid X_pres"
 
-        X_pred = sum(X_pres[:, step] @ self.armats_[step] for step in range(self.order))
+        X_pred = sum(
+            X_pres[:, step] @ self.armats_[step].T for step in range(self.order)
+        )
         return X_pred
 
     def score(self: T, X: np.ndarray, groups: np.ndarray | None = None) -> float:

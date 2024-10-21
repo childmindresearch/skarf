@@ -19,30 +19,30 @@ class CovarianceARModel(ARModel):
 
     def __init__(
         self,
-        cov_estimator: EmpiricalCovariance,
-        use_precision: bool = False,
-        degree: int = 3,
-        alpha: float | None = None,
-        with_diagonal: bool = False,
+        estimator: EmpiricalCovariance,
         order: int = 1,
         lag: int = 1,
+        with_diagonal: bool = False,
+        degree: int = 3,
+        alpha: float | None = None,
+        use_precision: bool = False,
         refit_cov: bool = True,
     ):
         super().__init__(order=order, lag=lag)
-        self.cov_estimator = cov_estimator
-        self.use_precision = use_precision
+        self.estimator = estimator
+        self.with_diagonal = with_diagonal
         self.degree = degree
         self.alpha = alpha
-        self.with_diagonal = with_diagonal
+        self.use_precision = use_precision
         self.refit_cov = refit_cov
 
     def fit(self: T, X: np.ndarray, groups: np.ndarray | None = None) -> T:
         if self.refit_cov:
-            self.cov_estimator.fit(X)
+            self.estimator.fit(X)
         else:
-            check_is_fitted(self.cov_estimator)
+            check_is_fitted(self.estimator)
 
-        mat = self.get_precision() if self.use_precision else self.get_covariance()
+        mat = self._get_precision() if self.use_precision else self._get_covariance()
         mat = self._preprocess_covariance(mat)
 
         X_pres, X_post, _ = self.tsplit(X, groups=groups)
@@ -51,7 +51,7 @@ class CovarianceARModel(ARModel):
         pow_mats = np.stack([mat ** deg for deg in range(1, self.degree + 1)])
         A = np.stack(
             [
-                (X_pres[:, step] @ pmat).flatten()
+                (X_pres[:, step] @ pmat.T).flatten()
                 for step in range(self.order) for pmat in pow_mats
             ],
             axis=-1,
@@ -86,11 +86,11 @@ class CovarianceARModel(ARModel):
         self.armats_ = armats
         return self
 
-    def get_covariance(self) -> np.ndarray:
-        return self.cov_estimator.covariance_
+    def _get_covariance(self) -> np.ndarray:
+        return self.estimator.covariance_
 
-    def get_precision(self) -> np.ndarray:
-        return self.cov_estimator.get_precision()
+    def _get_precision(self) -> np.ndarray:
+        return self.estimator.get_precision()
 
     def _preprocess_covariance(self, covariance: np.ndarray) -> np.ndarray:
         assert (
@@ -104,7 +104,7 @@ class CovarianceARModel(ARModel):
         if not self.with_diagonal:
             np.fill_diagonal(mat, 0.0)  # ignore diagonal
         mat = mat / max(np.max(np.abs(mat)), 1e-4)  # scale values
-        mat = np.ascontiguousarray(mat.T)   # transpose (assuming i -> j direction)
+        mat = np.ascontiguousarray(mat)
         return mat
 
 
