@@ -5,7 +5,14 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 from sklearn.utils.validation import check_is_fitted
 
-from .utils import tsplit, group_tsplit
+from .timeseries import (
+    ArrayLike,
+    is_batch_timeseries,
+    is_single_timeseries,
+    tstride,
+    tshift,
+    tstack,
+)
 
 
 T = TypeVar("T", bound="ARModel")
@@ -18,32 +25,43 @@ class ARModel(BaseEstimator):
         self.order = order
         self.lag = lag
 
-    def fit(self: T, X: np.ndarray, groups: np.ndarray | None = None) -> T:
+    def fit(self: T, X: ArrayLike) -> T:
         ...
 
-    def predict(self: T, X_pres: np.ndarray) -> np.ndarray:
+    def predict(self: T, X: ArrayLike) -> np.ndarray:
         check_is_fitted(self)
-        assert X_pres.ndim == 3 and X_pres.shape[1] == self.order, "invalid X_pres"
+        if is_batch_timeseries(X):
+            return tstack([self._predict_single(Xi) for Xi in X])
+        return self._predict_single(X)
 
+    def _predict_single(self, X: np.ndarray) -> np.ndarray:
+        assert is_single_timeseries(
+            X
+        ), "input must be a single timeseries, shape (T, D)"
+        X_stride = self.tstride(X)
         X_pred = sum(
-            X_pres[:, step] @ self.armats_[step].T for step in range(self.order)
+            X_stride[step] @ self.armats_[step].T for step in range(self.order)
         )
         return X_pred
 
-    def score(self: T, X: np.ndarray, groups: np.ndarray | None = None) -> float:
-        X_pres, X_post, _ = self.tsplit(X, groups=groups)
-        X_pred = self.predict(X_pres)
-        score = r2_score(X_post, X_pred)
-        return score
-
-    def tsplit(
-        self: T, X: np.ndarray, groups: np.ndarray | None = None
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        if groups is None:
-            X_pre, X_post = tsplit(X, order=self.order, lag=self.lag)
-            split_groups = None
-        else:
-            X_pre, X_post, split_groups = group_tsplit(
-                X, groups, order=self.order, lag=self.lag
+    def score(self: T, X: ArrayLike) -> float:
+        X_pred = self.predict(X)
+        X_shift = self.tshift(X)
+        if is_batch_timeseries(X):
+            # Nb, for batch timeseries the metric is mean R2 over each element
+            # timeseries, which is not necessarily identical to the global R2 over the
+            # concatenated timeseries.
+            return np.mean(
+                [self.scoring_function(X_shift[ii], X_pred[ii]) for ii in range(len(X))]
             )
-        return X_pre, X_post, split_groups
+        return self.scoring_function(X_shift, X_pred)
+
+    def scoring_function(self: T, X_shift: np.ndarray, X_pred: np.ndarray) -> float:
+        return r2_score(X_shift, X_pred)
+
+    def tstride(self: T, X: ArrayLike) -> np.ndarray:
+        return tstride(X, order=self.order, lag=self.lag)
+
+    def tshift(self: T, X: ArrayLike) -> np.ndarray:
+        # account for the stride in higher-order AR prediction
+        return tshift(X, lag=self.order - 1 + self.lag)
