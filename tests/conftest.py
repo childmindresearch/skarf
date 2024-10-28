@@ -36,11 +36,3 @@ def orth_mat_data(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
         samples.append(sample)
     samples = np.stack(samples)
     return A, samples
-
-
-@pytest.fixture(scope="module")
-def groups() -> np.ndarray:
-    groups = np.concatenate(
-        [np.full((100,), 3, dtype=np.int64), np.full((156,), 1, dtype=np.int64)],
-    )
-    return groups

@@ -40,6 +40,15 @@ def tstack(X: ArrayLike) -> np.ndarray:
         return stacked
 
 
+def tflatten(X: ArrayLike) -> tuple[np.ndarray, np.ndarray]:
+    if is_batch_timeseries(X):
+        seq_ids = np.concatenate([np.full(len(Xi), ii) for ii, Xi in enumerate(X)])
+        X = np.concatenate(X)
+    else:
+        seq_ids = np.zeros(len(X), dtype=np.int64)
+    return X, seq_ids
+
+
 def is_single_timeseries(X: Any) -> bool:
     return isinstance(X, np.ndarray) and X.ndim == 2
 

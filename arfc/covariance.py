@@ -3,16 +3,18 @@ from typing import TypeVar
 
 import numpy as np
 from scipy.linalg import block_diag
+from sklearn.base import MetaEstimatorMixin
 from sklearn.covariance import EmpiricalCovariance
 from sklearn.utils.validation import check_is_fitted
 
 from .base import ARModel
+from . import timeseries as ts
 
 
 T = TypeVar("T", bound="CovarianceARModel")
 
 
-class CovarianceARModel(ARModel):
+class CovarianceARModel(ARModel, MetaEstimatorMixin):
     coef_: np.ndarray
     rank_: int
     singular_values_: np.ndarray
@@ -36,28 +38,33 @@ class CovarianceARModel(ARModel):
         self.use_precision = use_precision
         self.refit_cov = refit_cov
 
-    def fit(self: T, X: np.ndarray, groups: np.ndarray | None = None) -> T:
+    def fit(self: T, X: ts.ArrayLike) -> T:
         if self.refit_cov:
-            self.estimator.fit(X)
+            X_flat, _ = ts.tflatten(X)
+            self.estimator.fit(X_flat)
         else:
             check_is_fitted(self.estimator)
 
         mat = self._get_precision() if self.use_precision else self._get_covariance()
         mat = self._preprocess_covariance(mat)
 
-        X_pres, X_post, _ = self.tsplit(X, groups=groups)
+        X_stride = self.tstride(X)
+        X_shift = self.tshift(X)
+        if ts.is_batch_timeseries(X):
+            X_stride = np.concatenate(X_stride, axis=1)
+            X_shift = np.concatenate(X_shift)
 
         # pre-compute polynomial ar terms
         pow_mats = np.stack([mat**deg for deg in range(1, self.degree + 1)])
         A = np.stack(
             [
-                (X_pres[:, step] @ pmat.T).flatten()
+                (X_stride[step] @ pmat.T).flatten()
                 for step in range(self.order)
                 for pmat in pow_mats
             ],
             axis=-1,
         )
-        b = X_post.flatten()
+        b = X_shift.flatten()
 
         # Augment for ridge penalty of reconstructed ar matrix. We want to penalize the
         # squared norm of each lag ar matrix, so we construct a block diagonal matrix of

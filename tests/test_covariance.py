@@ -17,7 +17,6 @@ from arfc.covariance import CovarianceARModel, FrozenCovariance
 )
 def test_covariance_ar_model(
     random_data: np.ndarray,
-    groups: np.ndarray,
     use_precision: bool,
     degree: int,
     order: int,
@@ -32,8 +31,15 @@ def test_covariance_ar_model(
         lag=lag,
     )
 
-    model.fit(random_data, groups=groups)
-    model.score(random_data, groups=groups)
+    model.fit(random_data)
+    model.score(random_data)
+
+
+def test_covariance_ar_model_batch(random_batch_data: np.ndarray):
+    cov = EmpiricalCovariance()
+    model = CovarianceARModel(cov, order=2)
+    model.fit(random_batch_data)
+    model.score(random_batch_data)
 
 
 def test_covariance_ar_model_ridge(
