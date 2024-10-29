@@ -1,16 +1,16 @@
 from typing import TypeVar
 
 import numpy as np
-from sklearn.base import clone
+from sklearn.base import MetaEstimatorMixin, clone
 from sklearn.linear_model import LinearRegression
-from sklearn.utils.validation import check_is_fitted
 
 from .base import ARModel
+from . import timeseries as ts
 
 T = TypeVar("T", bound="LinearARModel")
 
 
-class LinearARModel(ARModel):
+class LinearARModel(ARModel, MetaEstimatorMixin):
     def __init__(
         self,
         estimator: LinearRegression,
@@ -27,23 +27,27 @@ class LinearARModel(ARModel):
         self.with_diagonal = with_diagonal
         self.per_target = per_target
 
-    def fit(self: T, X: np.ndarray, groups: np.ndarray | None = None) -> T:
-        # X_pres: (time, order, dim)
-        # X_post: (time, dim)
-        dim = X.shape[1]
-        X_pres, X_post, _ = self.tsplit(X, groups=groups)
+    def fit(self: T, X: ts.ArrayLike) -> T:
+        # X_stride: (order, time, dim)
+        # X_shift: (time, dim)
+        X_stride = self.tstride(X)
+        X_shift = self.tshift(X)
+        if ts.is_batch_timeseries(X):
+            X_stride = np.concatenate(X_stride, axis=1)
+            X_shift = np.concatenate(X_shift)
+        dim = X_shift.shape[-1]
 
         if self.per_target:
-            estimators = [self._fit_single(X_pres, X_post, ii) for ii in range(dim)]
+            estimators = [
+                self._fit_component(X_stride, X_shift, ii) for ii in range(dim)
+            ]
             coef = np.stack([estimator.coef_ for estimator in estimators])
         else:
-            estimator = self._fit_batch(X_pres, X_post)
+            estimator = self._fit_joint(X_stride, X_shift)
             coef = estimator.coef_
 
         # coef: (dim, order * dim)
-        armats = np.ascontiguousarray(
-            coef.reshape(dim, self.order, dim).transpose(1, 0, 2)
-        )
+        armats = np.ascontiguousarray(coef.reshape(dim, self.order, dim).swapaxes(0, 1))
 
         if not self.with_diagonal:
             armats[:, np.arange(dim), np.arange(dim)] = 0.0
@@ -53,48 +57,54 @@ class LinearARModel(ARModel):
         self.armats_ = armats
         return self
 
-    def _fit_single(
-        self: T, X_pres: np.ndarray, X_post: np.ndarray, index: int
+    def _fit_component(
+        self: T, X_stride: np.ndarray, X_shift: np.ndarray, index: int
     ) -> LinearRegression:
         estimator = clone(self.estimator)
         if not self.with_diagonal:
-            X_pres = X_pres.copy()
-            X_pres[:, :, index] = 0
-        X_pres_flat = X_pres.reshape((X_pres.shape[0], -1))
-        estimator.fit(X_pres_flat, X_post[:, index])
+            X_stride = X_stride.copy()
+            X_stride[:, :, index] = 0
+        X_stride_flat = self._flatten_strided(X_stride)
+        estimator.fit(X_stride_flat, X_shift[:, index])
         return estimator
 
-    def _fit_batch(self: T, X_pres: np.ndarray, X_post: np.ndarray) -> LinearRegression:
-        X_pres_flat = X_pres.reshape((X_pres.shape[0], -1))
-        self.estimator.fit(X_pres_flat, X_post)
+    def _fit_joint(
+        self: T, X_stride: np.ndarray, X_shift: np.ndarray
+    ) -> LinearRegression:
+        X_stride_flat = self._flatten_strided(X_stride)
+        self.estimator.fit(X_stride_flat, X_shift)
         return self.estimator
 
-    def predict(self: T, X_pres: np.ndarray) -> np.ndarray:
+    def _predict_single(self: T, X: np.ndarray) -> np.ndarray:
         # predict using underlying models
         # should be equivalent to base prediction, but just to be careful
         # (one possible difference is intercept/scaling).
-        check_is_fitted(self)
-        assert X_pres.ndim == 3 and X_pres.shape[1] == self.order, "invalid X_pres"
-        dim = X_pres.shape[2]
+        X_stride = self.tstride(X)
+        dim = X_stride.shape[-1]
 
         if self.per_target:
             X_pred = np.stack(
-                [self._predict_single(X_pres, ii) for ii in range(dim)],
+                [self._predict_component(X_stride, ii) for ii in range(dim)],
                 axis=-1,
             )
         else:
-            X_pred = self._predict_batch(X_pres)
+            X_pred = self._predict_joint(X_stride)
         return X_pred
 
-    def _predict_single(self: T, X_pres: np.ndarray, index: int) -> np.ndarray:
+    def _predict_component(self: T, X_stride: np.ndarray, index: int) -> np.ndarray:
         if not self.with_diagonal:
-            X_pres = X_pres.copy()
-            X_pres[:, :, index] = 0
-        X_pres_flat = X_pres.reshape((X_pres.shape[0], -1))
-        X_pred_i = self.estimators_[index].predict(X_pres_flat)
+            X_stride = X_stride.copy()
+            X_stride[:, :, index] = 0
+        X_stride_flat = self._flatten_strided(X_stride)
+        X_pred_i = self.estimators_[index].predict(X_stride_flat)
         return X_pred_i
 
-    def _predict_batch(self: T, X_pres: np.ndarray) -> np.ndarray:
-        X_pres_flat = X_pres.reshape((X_pres.shape[0], -1))
-        X_pred = self.estimator.predict(X_pres_flat)
+    def _predict_joint(self: T, X_stride: np.ndarray) -> np.ndarray:
+        X_stride_flat = self._flatten_strided(X_stride)
+        X_pred = self.estimator.predict(X_stride_flat)
         return X_pred
+
+    def _flatten_strided(self: T, X_stride: np.ndarray) -> np.ndarray:
+        assert X_stride.shape[0] == self.order, "invalid strided input shape"
+        _, T, D = X_stride.shape
+        return X_stride.swapaxes(0, 1).reshape((T, self.order * D))
