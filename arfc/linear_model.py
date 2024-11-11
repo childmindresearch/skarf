@@ -1,13 +1,9 @@
-from typing import TypeVar
-
 import numpy as np
 from sklearn.base import MetaEstimatorMixin, clone
 from sklearn.linear_model import LinearRegression
 
 from .base import ARModel
 from . import timeseries as ts
-
-T = TypeVar("T", bound="LinearARModel")
 
 
 class LinearARModel(ARModel, MetaEstimatorMixin):
@@ -27,7 +23,7 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         self.with_diagonal = with_diagonal
         self.per_target = per_target
 
-    def fit(self: T, X: ts.TimeseriesLike) -> T:
+    def fit(self, X: ts.TimeseriesLike) -> "LinearARModel":
         X = ts.as_numpy(X)
 
         # X_stride: (order, time, dim)
@@ -60,7 +56,7 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         return self
 
     def _fit_component(
-        self: T, X_stride: np.ndarray, X_shift: np.ndarray, index: int
+        self, X_stride: np.ndarray, X_shift: np.ndarray, index: int
     ) -> LinearRegression:
         estimator = clone(self.estimator)
         if not self.with_diagonal:
@@ -70,14 +66,12 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         estimator.fit(X_stride_flat, X_shift[:, index])
         return estimator
 
-    def _fit_joint(
-        self: T, X_stride: np.ndarray, X_shift: np.ndarray
-    ) -> LinearRegression:
+    def _fit_joint(self, X_stride: np.ndarray, X_shift: np.ndarray) -> LinearRegression:
         X_stride_flat = self._flatten_strided(X_stride)
         self.estimator.fit(X_stride_flat, X_shift)
         return self.estimator
 
-    def _predict_single(self: T, X: np.ndarray) -> np.ndarray:
+    def _predict_single(self, X: np.ndarray) -> np.ndarray:
         # predict using underlying models
         # should be equivalent to base prediction, but just to be careful
         # (one possible difference is intercept/scaling).
@@ -93,7 +87,7 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
             X_pred = self._predict_joint(X_stride)
         return X_pred
 
-    def _predict_component(self: T, X_stride: np.ndarray, index: int) -> np.ndarray:
+    def _predict_component(self, X_stride: np.ndarray, index: int) -> np.ndarray:
         if not self.with_diagonal:
             X_stride = X_stride.copy()
             X_stride[:, :, index] = 0
@@ -101,12 +95,12 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         X_pred_i = self.estimators_[index].predict(X_stride_flat)
         return X_pred_i
 
-    def _predict_joint(self: T, X_stride: np.ndarray) -> np.ndarray:
+    def _predict_joint(self, X_stride: np.ndarray) -> np.ndarray:
         X_stride_flat = self._flatten_strided(X_stride)
         X_pred = self.estimator.predict(X_stride_flat)
         return X_pred
 
-    def _flatten_strided(self: T, X_stride: np.ndarray) -> np.ndarray:
+    def _flatten_strided(self, X_stride: np.ndarray) -> np.ndarray:
         assert X_stride.shape[0] == self.order, "invalid strided input shape"
         _, T, D = X_stride.shape
         return X_stride.swapaxes(0, 1).reshape((T, self.order * D))

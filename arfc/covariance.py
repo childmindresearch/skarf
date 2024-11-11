@@ -1,5 +1,4 @@
 import warnings
-from typing import TypeVar
 
 import numpy as np
 from scipy.linalg import block_diag
@@ -9,9 +8,6 @@ from sklearn.utils.validation import check_is_fitted
 
 from .base import ARModel
 from . import timeseries as ts
-
-
-T = TypeVar("T", bound="CovarianceARModel")
 
 
 class CovarianceARModel(ARModel, MetaEstimatorMixin):
@@ -38,7 +34,7 @@ class CovarianceARModel(ARModel, MetaEstimatorMixin):
         self.use_precision = use_precision
         self.refit_cov = refit_cov
 
-    def fit(self: T, X: ts.TimeseriesLike) -> T:
+    def fit(self, X: ts.TimeseriesLike) -> "CovarianceARModel":
         X = ts.as_numpy(X)
 
         if self.refit_cov:
@@ -120,6 +116,6 @@ class FrozenCovariance(EmpiricalCovariance):
         super().__init__(store_precision=store_precision)
         self._set_covariance(covariance)
 
-    def fit(self, X: np.ndarray, y: np.ndarray | None = None):
+    def fit(self, X: np.ndarray, y: np.ndarray | None = None) -> "FrozenCovariance":
         warnings.warn("Calling fit has no effect on frozen covariance", RuntimeWarning)
         return self
