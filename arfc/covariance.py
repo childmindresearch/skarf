@@ -38,7 +38,9 @@ class CovarianceARModel(ARModel, MetaEstimatorMixin):
         self.use_precision = use_precision
         self.refit_cov = refit_cov
 
-    def fit(self: T, X: ts.ArrayLike) -> T:
+    def fit(self: T, X: ts.TimeseriesLike) -> T:
+        X = ts.as_numpy(X)
+
         if self.refit_cov:
             X_flat, _ = ts.tflatten(X)
             self.estimator.fit(X_flat)

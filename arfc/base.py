@@ -5,14 +5,7 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 from sklearn.utils.validation import check_is_fitted
 
-from .timeseries import (
-    ArrayLike,
-    is_batch_timeseries,
-    is_single_timeseries,
-    tstride,
-    tshift,
-    tstack,
-)
+from . import timeseries as ts
 
 
 T = TypeVar("T", bound="ARModel")
@@ -25,17 +18,18 @@ class ARModel(BaseEstimator):
         self.order = order
         self.lag = lag
 
-    def fit(self: T, X: ArrayLike) -> T:
+    def fit(self: T, X: ts.TimeseriesLike) -> T:
         ...
 
-    def predict(self: T, X: ArrayLike) -> np.ndarray:
+    def predict(self: T, X: ts.TimeseriesLike) -> np.ndarray:
         check_is_fitted(self)
-        if is_batch_timeseries(X):
-            return tstack([self._predict_single(Xi) for Xi in X])
+        X = ts.as_numpy(X)
+        if ts.is_batch_timeseries(X):
+            return ts.tstack([self._predict_single(Xi) for Xi in X])
         return self._predict_single(X)
 
     def _predict_single(self, X: np.ndarray) -> np.ndarray:
-        assert is_single_timeseries(
+        assert ts.is_single_timeseries(
             X
         ), "input must be a single timeseries, shape (T, D)"
         X_stride = self.tstride(X)
@@ -44,10 +38,11 @@ class ARModel(BaseEstimator):
         )
         return X_pred
 
-    def score(self: T, X: ArrayLike) -> float:
+    def score(self: T, X: ts.TimeseriesLike) -> float:
+        X = ts.as_numpy(X)
         X_pred = self.predict(X)
         X_shift = self.tshift(X)
-        if is_batch_timeseries(X):
+        if ts.is_batch_timeseries(X):
             # Nb, for batch timeseries the metric is mean R2 over each element
             # timeseries, which is not necessarily identical to the global R2 over the
             # concatenated timeseries.
@@ -59,9 +54,9 @@ class ARModel(BaseEstimator):
     def scoring_function(self: T, X_shift: np.ndarray, X_pred: np.ndarray) -> float:
         return r2_score(X_shift, X_pred)
 
-    def tstride(self: T, X: ArrayLike) -> np.ndarray:
-        return tstride(X, order=self.order, lag=self.lag)
+    def tstride(self: T, X: ts.TimeseriesLike) -> np.ndarray:
+        return ts.tstride(X, order=self.order, lag=self.lag)
 
-    def tshift(self: T, X: ArrayLike) -> np.ndarray:
+    def tshift(self: T, X: ts.TimeseriesLike) -> np.ndarray:
         # account for the stride in higher-order AR prediction
-        return tshift(X, lag=self.order - 1 + self.lag)
+        return ts.tshift(X, lag=self.order - 1 + self.lag)

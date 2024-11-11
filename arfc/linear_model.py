@@ -27,7 +27,9 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         self.with_diagonal = with_diagonal
         self.per_target = per_target
 
-    def fit(self: T, X: ts.ArrayLike) -> T:
+    def fit(self: T, X: ts.TimeseriesLike) -> T:
+        X = ts.as_numpy(X)
+
         # X_stride: (order, time, dim)
         # X_shift: (time, dim)
         X_stride = self.tstride(X)
