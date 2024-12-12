@@ -16,7 +16,7 @@ from arfc.covariance import CovarianceARModel, FrozenCovariance
     ],
 )
 def test_covariance_ar_model(
-    random_data: np.ndarray,
+    random_single_data: np.ndarray,
     use_precision: bool,
     degree: int,
     order: int,
@@ -31,8 +31,8 @@ def test_covariance_ar_model(
         lag=lag,
     )
 
-    model.fit(random_data)
-    model.score(random_data)
+    model.fit(random_single_data)
+    model.score(random_single_data)
 
 
 def test_covariance_ar_model_batch(random_batch_data: np.ndarray):
@@ -43,14 +43,14 @@ def test_covariance_ar_model_batch(random_batch_data: np.ndarray):
 
 
 def test_covariance_ar_model_ridge(
-    random_data: np.ndarray,
+    random_single_data: np.ndarray,
 ):
     cov = EmpiricalCovariance()
     base_model = CovarianceARModel(cov, order=2)
     ridge_model = CovarianceARModel(cov, order=2, alpha=1e5)
 
-    base_model.fit(random_data)
-    ridge_model.fit(random_data)
+    base_model.fit(random_single_data)
+    ridge_model.fit(random_single_data)
 
     base_ar_l2 = np.linalg.norm(base_model.armats_)
     ridge_ar_l2 = np.linalg.norm(ridge_model.armats_)

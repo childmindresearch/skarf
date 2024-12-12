@@ -14,7 +14,7 @@ from arfc.linear_model import LinearARModel
     ],
 )
 def test_linear_ar_model(
-    random_data: np.ndarray, with_diagonal: bool, per_target: bool
+    random_single_data: np.ndarray, with_diagonal: bool, per_target: bool
 ):
     lin = LinearRegression(fit_intercept=False)
     model = LinearARModel(
@@ -24,11 +24,11 @@ def test_linear_ar_model(
         with_diagonal=with_diagonal,
         per_target=per_target,
     )
-    model.fit(random_data)
-    model.score(random_data)
+    model.fit(random_single_data)
+    model.score(random_single_data)
 
-    X_pred_base = super(LinearARModel, model).predict(random_data)
-    X_pred = model.predict(random_data)
+    X_pred_base = super(LinearARModel, model).predict(random_single_data)
+    X_pred = model.predict(random_single_data)
     assert np.allclose(X_pred, X_pred_base)
 
 

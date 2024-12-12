@@ -13,12 +13,12 @@ from arfc.base import ARModel
         (3, 2),
     ],
 )
-def test_tstride_tshift(random_data: np.ndarray, order: int, lag: int):
+def test_tstride_tshift(random_single_data: np.ndarray, order: int, lag: int):
     model = ARModel(order=order, lag=lag)
 
-    T, D = random_data.shape
-    X_stride = model.tstride(random_data)
-    X_shift = model.tshift(random_data)
+    T, D = random_single_data.shape
+    X_stride = model.tstride(random_single_data)
+    X_shift = model.tshift(random_single_data)
     _stride_shift_checks(X_stride, X_shift, order, lag, T, D)
 
 
