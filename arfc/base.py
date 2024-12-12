@@ -38,9 +38,9 @@ class ARModel(BaseEstimator):
         X_pred = self.predict(X)
         X_shift = self.tshift(X)
         if ts.is_batch_timeseries(X):
-            # Nb, for batch timeseries the metric is mean R2 over each element
-            # timeseries, which is not necessarily identical to the global R2 over the
-            # concatenated timeseries.
+            # Nb, for batch timeseries the metric is (macro-averaged) mean R2 over each
+            # element timeseries, which is not necessarily identical to the global R2
+            # over the concatenated timeseries.
             return np.mean(
                 [self.scoring_function(X_shift[ii], X_pred[ii]) for ii in range(len(X))]
             )

@@ -94,16 +94,19 @@ def iter_groups(
     else:
         assert is_grouped_timeseries(X), "Invalid X"
         for group, df in X.groupby(X.columns[0]):
-            yield group, df.iloc[:, 1:]
+            # TODO: there may be a use case for returning a dataframe, if we want to
+            # support multi-level grouped time series, with e.g. nested subject, session
+            # group columns
+            yield group, df.iloc[:, -1].values
 
 
 def stack_groups(
-    grouped: list[tuple[int, pd.DataFrame]],
+    grouped: list[tuple[int, TimeseriesLike]],
     column_name: str = "group",
 ) -> pd.DataFrame:
     dfs = []
     for group, df in grouped:
-        df = df.copy()
+        df = as_pandas(df).copy()
         df.insert(0, column_name, group)
         dfs.append(df)
     df = pd.concat(dfs, ignore_index=True)
@@ -123,3 +126,17 @@ def as_numpy(X: TimeseriesLike) -> np.ndarray:
             return X.iloc[:, -1].values
         case _:
             return tstack(X)
+
+
+def as_pandas(X: TimeseriesLike) -> pd.DataFrame:
+    match type(X):
+        case pd.DataFrame:
+            return X
+        case np.ndarray:
+            if is_single_timeseries(X):
+                X = [X]
+            elif is_batch_timeseries(X):
+                X = list(X)
+            return pd.DataFrame({"timeseries": X})
+        case _:
+            return pd.DataFrame({"timeseries": X})
