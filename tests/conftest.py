@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 from pytest import FixtureRequest
 
@@ -9,7 +10,7 @@ def rng() -> np.random.Generator:
 
 
 @pytest.fixture(scope="module")
-def random_data(rng: np.random.Generator) -> np.ndarray:
+def random_single_data(rng: np.random.Generator) -> np.ndarray:
     X = rng.normal(size=(256, 64))
     return X
 
@@ -23,6 +24,34 @@ def random_batch_data(request: FixtureRequest, rng: np.random.Generator) -> np.n
     X = [rng.normal(size=(size, 64)) for size in sizes]
     X = np.stack(X) if len(set(sizes)) == 1 else np.array(X, dtype=object)
     return X
+
+
+@pytest.fixture(scope="module")
+def random_group_data(rng: np.random.Generator) -> pd.DataFrame:
+    groups = [1, 1, 2, 2, 3]
+    sizes = [128, 256, 192, 64, 128]
+    X = pd.DataFrame.from_records(
+        [
+            {"group": group, "timeseries": rng.normal(size=(size, 64))}
+            for group, size in zip(groups, sizes)
+        ]
+    )
+    return X
+
+
+@pytest.fixture(scope="module", params=["single", "batch", "group"])
+def random_data(
+    request: FixtureRequest,
+    random_single_data: np.ndarray,
+    random_batch_data: np.ndarray,
+    random_group_data: pd.DataFrame,
+) -> np.ndarray | pd.DataFrame:
+    data_map = {
+        "single": random_single_data,
+        "batch": random_batch_data,
+        "group": random_group_data,
+    }
+    return data_map[request.param]
 
 
 @pytest.fixture(scope="module")

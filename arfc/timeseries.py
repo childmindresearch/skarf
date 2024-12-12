@@ -2,7 +2,6 @@ from typing import Any, Generator
 
 import numpy as np
 import pandas as pd
-from sklearn.utils._indexing import _safe_indexing
 
 TimeseriesLike = list | tuple | np.ndarray | pd.Series | pd.DataFrame
 
@@ -36,9 +35,7 @@ def tshift(X: TimeseriesLike, lag: int = 1) -> np.ndarray:
 
 
 def tstack(X: TimeseriesLike) -> np.ndarray:
-    assert isinstance(X, (list, tuple, np.ndarray)), f"invalid X ({type(X)})"
-
-    if isinstance(X, np.ndarray):
+    if isinstance(X, (np.ndarray, pd.DataFrame)):
         return X
 
     try:
@@ -66,8 +63,10 @@ def is_single_timeseries(X: Any) -> bool:
 
 
 def is_batch_timeseries(X: Any) -> bool:
-    return isinstance(X, TimeseriesLike) and (
-        not len(X) or is_single_timeseries(_safe_indexing(X, 0))
+    if isinstance(X, pd.Series):
+        X = X.values
+    return isinstance(X, (list, tuple, np.ndarray)) and (
+        not len(X) or is_single_timeseries(X[0])
     )
 
 
@@ -86,14 +85,29 @@ def is_timeseries(X: Any) -> bool:
 
 
 def iter_groups(
-    X: TimeseriesLike | pd.DataFrame,
+    X: TimeseriesLike,
 ) -> Generator[tuple[int, TimeseriesLike], None, None]:
-    if not is_grouped_timeseries(X):
-        assert is_batch_timeseries(X), "expected batch or grouped timeseries"
+    if is_single_timeseries(X):
+        yield 0, X
+    elif is_batch_timeseries(X):
         yield from enumerate(X)
+    else:
+        assert is_grouped_timeseries(X), "Invalid X"
+        for group, df in X.groupby(X.columns[0]):
+            yield group, df.iloc[:, 1:]
 
-    for group, df in X.groupby(X.columns[0]):
-        yield group, df.iloc[:, 1:]
+
+def stack_groups(
+    grouped: list[tuple[int, pd.DataFrame]],
+    column_name: str = "group",
+) -> pd.DataFrame:
+    dfs = []
+    for group, df in grouped:
+        df = df.copy()
+        df.insert(0, column_name, group)
+        dfs.append(df)
+    df = pd.concat(dfs, ignore_index=True)
+    return df
 
 
 def as_numpy(X: TimeseriesLike) -> np.ndarray:
