@@ -24,12 +24,29 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         self.per_target = per_target
 
     def fit(self, X: ts.TimeseriesLike) -> "LinearARModel":
-        X = ts.as_numpy(X)
+        if ts.is_grouped_timeseries(X):
+            groups = X.iloc[:, 0].values
+        elif ts.is_batch_timeseries(X):
+            groups = np.arange(len(X))
+        else:
+            groups = None
+
+        if groups is not None and len(np.unique(groups)) == 1:
+            groups = None
 
         # X_stride: (order, time, dim)
         # X_shift: (time, dim)
+        X = ts.as_numpy(X)
         X_stride = self.tstride(X)
         X_shift = self.tshift(X)
+
+        if groups is not None:
+            groups = [
+                np.full(len(X_shifti), group)
+                for group, X_shifti in zip(groups, X_shift)
+            ]
+            groups = np.concatenate(groups)
+
         if ts.is_batch_timeseries(X):
             X_stride = np.concatenate(X_stride, axis=1)
             X_shift = np.concatenate(X_shift)
@@ -37,11 +54,12 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
 
         if self.per_target:
             estimators = [
-                self._fit_component(X_stride, X_shift, ii) for ii in range(dim)
+                self._fit_component(X_stride, X_shift, ii, groups=groups)
+                for ii in range(dim)
             ]
             coef = np.stack([estimator.coef_ for estimator in estimators])
         else:
-            estimator = self._fit_joint(X_stride, X_shift)
+            estimator = self._fit_joint(X_stride, X_shift, groups=groups)
             coef = estimator.coef_
 
         # coef: (dim, order * dim)
@@ -56,20 +74,29 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         return self
 
     def _fit_component(
-        self, X_stride: np.ndarray, X_shift: np.ndarray, index: int
+        self,
+        X_stride: np.ndarray,
+        X_shift: np.ndarray,
+        index: int,
+        groups: np.ndarray | None = None,
     ) -> LinearRegression:
         estimator = clone(self.estimator)
         if not self.with_diagonal:
             X_stride = X_stride.copy()
             X_stride[:, :, index] = 0
         X_stride_flat = self._flatten_strided(X_stride)
-        estimator.fit(X_stride_flat, X_shift[:, index])
-        return estimator
+        return _try_fit_groups(
+            estimator, X_stride_flat, X_shift[:, index], groups=groups
+        )
 
-    def _fit_joint(self, X_stride: np.ndarray, X_shift: np.ndarray) -> LinearRegression:
+    def _fit_joint(
+        self,
+        X_stride: np.ndarray,
+        X_shift: np.ndarray,
+        groups: np.ndarray | None = None,
+    ) -> LinearRegression:
         X_stride_flat = self._flatten_strided(X_stride)
-        self.estimator.fit(X_stride_flat, X_shift)
-        return self.estimator
+        return _try_fit_groups(self.estimator, X_stride_flat, X_shift, groups=groups)
 
     def _predict_single(self, X: np.ndarray) -> np.ndarray:
         # predict using underlying models
@@ -104,3 +131,18 @@ class LinearARModel(ARModel, MetaEstimatorMixin):
         assert X_stride.shape[0] == self.order, "invalid strided input shape"
         _, T, D = X_stride.shape
         return X_stride.swapaxes(0, 1).reshape((T, self.order * D))
+
+
+def _try_fit_groups(
+    model, X: np.ndarray, y: np.ndarray, groups: np.ndarray | None = None
+):
+    """
+    Some estimators accept groups, others don't. In principle it's possible to determine
+    what params an estimator accepts. But it's too much of a hassle.
+
+    https://scikit-learn.org/1.5/auto_examples/miscellaneous/plot_metadata_routing.html
+    """
+    try:
+        return model.fit(X, y, groups=groups)
+    except TypeError:
+        return model.fit(X, y)
