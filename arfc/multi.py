@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 from sklearn.base import BaseEstimator, MetaEstimatorMixin, TransformerMixin, clone
 from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.parallel import Parallel, delayed
 
 from .base import ARModel
 from . import timeseries as ts
@@ -12,14 +13,17 @@ from . import timeseries as ts
 class MultiARModel(BaseEstimator, MetaEstimatorMixin):
     estimators_: dict[int, ARModel]
 
-    def __init__(self, estimator: ARModel):
+    def __init__(self, estimator: ARModel, n_jobs: int | None = None):
         self.estimator = estimator
+        self.n_jobs = n_jobs
 
     def fit(self, X: ts.TimeseriesLike, y: Any | None = None) -> "MultiARModel":
-        estimators = {}
+        jobs, groups = [], []
         for group, X_group in ts.iter_groups(X):
-            estimators[group] = self._fit_single(X_group)
-        self.estimators_ = estimators
+            groups.append(group)
+            jobs.append(delayed(self._fit_single)(X_group))
+        results = Parallel(n_jobs=self.n_jobs)(jobs)
+        self.estimators_ = {group: est for group, est in zip(groups, results)}
 
         if len(self.estimators_) == 0:
             raise ValueError("No time series groups in training data.")
