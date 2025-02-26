@@ -5,7 +5,7 @@ from numpy.random import RandomState
 from sklearn.base import MetaEstimatorMixin, clone
 from sklearn.linear_model._base import LinearModel
 
-from .base import BaseVAR, _preprocess_data
+from ._base import BaseVAR, _preprocess_data
 
 
 class LinearVAR(BaseVAR, MetaEstimatorMixin):

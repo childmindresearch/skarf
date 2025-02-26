@@ -1,11 +1,13 @@
 from abc import ABCMeta, abstractmethod
-from typing import Literal, NamedTuple, Self
+from typing import NamedTuple, Self
 
 import numpy as np
 from numpy.random import RandomState
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 from sklearn.utils.validation import check_is_fitted, check_random_state
+
+from ._utils import _tstride, _segments_to_windows
 
 
 class BaseVAR(BaseEstimator, metaclass=ABCMeta):
@@ -197,7 +199,7 @@ def _preprocess_data(
         y = X
 
     if segments is not None:
-        _, windows = _segments_to_windows(segments)
+        windows, _ = _segments_to_windows(segments)
     else:
         windows = [(0, len(X))]
 
@@ -262,57 +264,3 @@ def _align_X_y(
     X_stride = X_stride[: len(X) - lag]
     y_shift = y[order - 1 + lag :]
     return X_stride, y_shift
-
-
-def _segments_to_windows(segments: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Extract contiguous window slices from segments label array.
-
-    Returns array of `values` representing the value of each unique segment, and
-    `windows` containing the `(start, stop)` indices for each contiguous segment.
-
-    Raises an error if the segments are not contiguous.
-    """
-    assert segments.ndim in {1, 2}, "1d or 2d segments expected"
-    is_2d = segments.ndim == 2
-
-    values, indices = np.unique(segments, axis=0 if is_2d else None, return_index=True)
-    order = np.argsort(indices)  # sort by order of appearance
-    values = values[order]
-
-    windows = []
-    for val in values:
-        mask = segments == val
-        if is_2d:
-            mask = np.all(axis=1)
-        (indices,) = np.where(mask)
-        assert np.max(np.diff(indices)) == 1, "expected contiguous segments"
-        start, length = indices[0], len(indices)
-        windows.append([start, start + length])
-
-    windows = np.array(windows)
-    return values, windows
-
-
-def _tstride(
-    X: np.ndarray,
-    order: int = 1,
-    mode: Literal["valid", "same"] = "valid",
-) -> np.ndarray:
-    """Select temporally offset slices of a multivariate timeseries.
-
-    Given X of shape (n_samples, n_features), returns array of shape
-    (n_samples - order + 1, order, n_features) if `mode = "valid"`, or shape
-    (n_samples, order, n_features) if `mode = "same"`.
-
-    If `mode = "same"`, the input is prepended with zeros.
-    """
-    if mode == "same" and order > 1:
-        X = np.pad(X, [(order - 1, 0), (0, 0)])
-    length = len(X) - order + 1
-    assert length > 0, f"time series too short for {order=}"
-    # Take slices in reverse order so that longer lags appear later.
-    X_stride = np.stack(
-        [X[start : start + length] for start in reversed(range(order))],
-        axis=1,
-    )
-    return X_stride

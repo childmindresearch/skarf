@@ -6,7 +6,7 @@ from sklearn.base import MetaEstimatorMixin
 from sklearn.covariance import EmpiricalCovariance
 from sklearn.utils.validation import check_is_fitted
 
-from .base import BaseVAR, _preprocess_data
+from ._base import BaseVAR, _preprocess_data
 
 
 class CovarianceVAR(BaseVAR, MetaEstimatorMixin):

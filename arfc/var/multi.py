@@ -1,4 +1,3 @@
-from itertools import repeat
 from typing import Any, Self
 
 import numpy as np
@@ -7,7 +6,8 @@ from sklearn.base import BaseEstimator, MetaEstimatorMixin, TransformerMixin, cl
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.parallel import Parallel, delayed
 
-from .base import BaseVAR
+from ._base import BaseVAR
+from ._utils import _optional_zip
 
 
 class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
@@ -123,16 +123,6 @@ def stack_arrays(arrays: list[np.ndarray]) -> np.ndarray:
         stacked = np.empty(len(arrays), dtype=object)
         stacked[:] = arrays
         return stacked
-
-
-def _optional_zip(*arrays):
-    """Zip a sequence of iterables, repeating None for any that are None."""
-    array = arrays[0]
-    assert array is not None, "first array should not be None"
-    length = len(array)
-
-    arrays = [repeat(None, length) if arr is None else arr for arr in arrays]
-    yield from zip(*arrays)
 
 
 def _check_X_sample_ids(
