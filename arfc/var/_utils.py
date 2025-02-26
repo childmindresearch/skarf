@@ -25,6 +25,8 @@ def _segments_to_windows(segments: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if is_2d:
             mask = np.all(mask, axis=1)
         (indices,) = np.where(mask)
+        if len(indices) < 2:
+            raise ValueError("Segments should have at least two time points.")
         if np.max(np.diff(indices)) > 1:
             raise ValueError("Segments should be contiguous.")
         start, length = indices[0], len(indices)
@@ -47,10 +49,16 @@ def _tstride(
 
     If `mode = "same"`, the input is prepended with zeros.
     """
+    assert mode in {"valid", "same"}, "expected mode in {valid, same}"
+    assert order > 0, "expected order > 0"
+
     if mode == "same" and order > 1:
         X = np.pad(X, [(order - 1, 0), (0, 0)])
+
     length = len(X) - order + 1
-    assert length > 0, f"time series too short for {order=}"
+    if length <= 0:
+        raise ValueError(f"Time series too short for {order=}")
+
     # Take slices in reverse order so that longer lags appear later.
     X_stride = np.stack(
         [X[start : start + length] for start in reversed(range(order))],
@@ -61,9 +69,11 @@ def _tstride(
 
 def _optional_zip(*arrays):
     """Zip a sequence of iterables, repeating None for any that are None."""
-    array = arrays[0]
-    assert array is not None, "first array should not be None"
-    length = len(array)
+    try:
+        first = next((arr for arr in arrays if arr is not None))
+    except StopIteration:
+        raise ValueError("Not all arrays should be None")
+    length = len(first)
 
     arrays = [repeat(None, length) if arr is None else arr for arr in arrays]
     yield from zip(*arrays)
