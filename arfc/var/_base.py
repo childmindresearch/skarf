@@ -161,6 +161,8 @@ class _VARData(NamedTuple):
     """Strided input data, shape (n_samples - order - lag + 1, order, n_features)."""
     y_shift: np.ndarray
     """Temporally shifted targets, shape (n_samples - order - lag + 1, n_targets)."""
+    segments_shift: np.ndarray | None
+    """Shifted temporal segments."""
     sample_weight_shift: np.ndarray | None
     """Shifted sample weights, shape (n_samples - order - lag + 1,)."""
     groups_shift: np.ndarray | None
@@ -191,23 +193,23 @@ def _preprocess_data(
     prediction window overlaps with an excluded sample are also excluded.
     """
     if sample_weight is not None:
-        assert np.allclose(
-            sample_weight, sample_weight > 0
-        ), "only binary sample_weight supported"
+        if not np.allclose(sample_weight, sample_weight > 0):
+            raise ValueError("Only binary sample_weight supported.")
 
     if y is None:
         y = X
 
     if segments is not None:
-        windows, _ = _segments_to_windows(segments)
+        windows, segment_values = _segments_to_windows(segments)
     else:
-        windows = [(0, len(X))]
+        windows, segment_values = [(0, len(X))], [0]
 
     X_stride, y_shift = [], []
+    segments_shift = [] if segments is not None else None
     groups_shift = [] if groups is not None else None
     sample_weight_shift = [] if sample_weight is not None else None
 
-    for start, stop in windows:
+    for (start, stop), value in zip(windows, segment_values):
         X_stride_i, y_shift_i = _align_X_y(
             X[start:stop], y[start:stop], order=order, lag=lag
         )
@@ -215,13 +217,8 @@ def _preprocess_data(
         X_stride.append(X_stride_i)
         y_shift.append(y_shift_i)
 
-        # Shift groups indicator to align with targets
-        if groups is not None:
-            groups_i = groups[start:stop]
-            n_groups = len(np.unique(groups_i))
-            assert n_groups == 1, "expected each segment to contain exactly 1 group"
-            groups_shift_i = groups_i[order - 1 + lag :]
-            groups_shift.append(groups_shift_i)
+        if segments is not None:
+            segments_shift.append(np.full(len(y_shift_i), value))
 
         # Mask out time points that have overlap with the excluded time points
         if sample_weight is not None:
@@ -231,19 +228,33 @@ def _preprocess_data(
             sample_weight_shift_i = np.concatenate(
                 [sample_weight_stride_i, sample_weight_shift_i[:, None]], axis=1
             )
-            sample_weight_shift_i = np.minimum(sample_weight_shift_i, axis=1)
+            sample_weight_shift_i = np.min(sample_weight_shift_i, axis=1)
             sample_weight_shift.append(sample_weight_shift_i)
+
+        # Shift groups indicator to align with targets
+        if groups is not None:
+            groups_i = groups[start:stop]
+            n_groups = len(np.unique(groups_i))
+            if n_groups != 1:
+                raise ValueError("Each data segment should contain only one CV group")
+            groups_shift_i = groups_i[order + lag - 1 :]
+            groups_shift.append(groups_shift_i)
 
     X_stride = np.concatenate(X_stride)
     y_shift = np.concatenate(y_shift)
 
-    if groups_shift is not None:
-        groups_shift = np.concatenate(groups_shift)
+    if segments is not None:
+        segments_shift = np.concatenate(segments_shift)
 
-    if sample_weight_shift is not None:
+    if sample_weight is not None:
         sample_weight_shift = np.concatenate(sample_weight_shift)
 
-    return _VARData(X_stride, y_shift, sample_weight_shift, groups_shift)
+    if groups is not None:
+        groups_shift = np.concatenate(groups_shift)
+
+    return _VARData(
+        X_stride, y_shift, segments_shift, sample_weight_shift, groups_shift
+    )
 
 
 def _align_X_y(
@@ -257,10 +268,12 @@ def _align_X_y(
     - X_stride: (n_samples - order - lag + 1, order, n_features)
     - y_shift: (n_samples - order - lag + 1, n_targets)
     """
+    assert order > 0, "expected order > 0"
+    assert lag >= 0, "expected lag >= 0"
+
     if y is None:
         y = X
-    # shape (n_samples - order + 1, order, n_features)
     X_stride = _tstride(X, order=order, mode="valid")
-    X_stride = X_stride[: len(X) - lag]
-    y_shift = y[order - 1 + lag :]
+    X_stride = X_stride[: len(X_stride) - lag]
+    y_shift = y[order + lag - 1 :]
     return X_stride, y_shift
