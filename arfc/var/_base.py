@@ -37,6 +37,8 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
     coef_: np.ndarray
     """Array of VAR coefficients of shape (order, n_targets, n_features)."""
 
+    scoring_function = staticmethod(r2_score)
+
     def __init__(
         self,
         order: int = 1,
@@ -101,6 +103,49 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         X_pred = np.einsum("npd,pkd->nk", X_stride, self.coef_)
         return X_pred
 
+    def score(
+        self,
+        X: np.ndarray,
+        y: np.ndarray | None = None,
+        segments: np.ndarray | None = None,
+        sample_weight: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Return the prediction score for the model (by default R2).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training multivariate time series.
+
+        y : array-like of shape (n_samples, n_targets,) or (n_samples,) or None
+            Target time series. If `None`, the data itself is used as the target.
+
+        segments : array-like of shape (n_samples,)
+            Indicator array of contiguous temporal segments in `X`.
+
+        sample_weight : float or array-like of shape (n_samples,), default=None
+            Sample weights. Only binary sample weights indicating time points to
+            include/exclude are currently supported.
+
+        Returns
+        -------
+        score: float
+            Mean VAR prediction score (by default R2, see `scoring_function`).
+        """
+        X_stride, y_shift, _, sample_weight_shift, _ = _preprocess_data(
+            X,
+            y=y,
+            order=self.order,
+            lag=self.lag,
+            segments=segments,
+            sample_weight=sample_weight,
+        )
+        X_pred = self._predict_strided(X_stride)
+        score = self.scoring_function(
+            y_shift, X_pred, sample_weight=sample_weight_shift
+        )
+        return score
+
     def sample(self, n_samples: int, X_init: np.ndarray | None = None) -> np.ndarray:
         """Sample simulated data from the VAR model.
 
@@ -118,13 +163,14 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         X_samples : array-like of shape (n_samples, n_features)
         """
         check_is_fitted(self)
-        assert (
-            self.coef_.shape[1] == self.coef_.shape[2]
-        ), "sampling requires n_targets == n_features"
+        if self.coef_.shape[1] != self.coef_.shape[2]:
+            raise RuntimeError("Sampling requires n_targets == n_features.")
+        if self.lag == 0:
+            raise RuntimeError("Sampling not supported for lag 0.")
 
         if X_init is None:
             rng = check_random_state(self.random_state)
-            X_init = rng.randn((1, self.coef_.shape[1]))
+            X_init = rng.randn(self.order, self.coef_.shape[1])
 
         X_samples = X_init
         for _ in range(n_samples):
@@ -133,27 +179,6 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
 
         X_samples = X_samples[-n_samples:]
         return X_samples
-
-    def score(
-        self,
-        X: np.ndarray,
-        y: np.ndarray | None = None,
-        segments: np.ndarray | None = None,
-        sample_weight: np.ndarray | None = None,
-    ) -> np.ndarray:
-        X_stride, y_shift, sample_weight_shift, _ = _preprocess_data(
-            X,
-            y=y,
-            order=self.order,
-            lag=self.lag,
-            segments=segments,
-            sample_weight=sample_weight,
-        )
-        X_pred = self._predict_strided(X_stride)
-
-        return self.scoring_function(y_shift, X_pred, sample_weight=sample_weight_shift)
-
-    scoring_function = r2_score
 
 
 class _VARData(NamedTuple):
