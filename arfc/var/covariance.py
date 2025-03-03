@@ -1,6 +1,7 @@
 from typing import Self
 
 import numpy as np
+from numpy.random import RandomState
 from scipy.linalg import block_diag
 from sklearn.base import MetaEstimatorMixin
 from sklearn.covariance import EmpiricalCovariance
@@ -10,9 +11,68 @@ from ._base import BaseVAR, _preprocess_data
 
 
 class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
+    """Covariance based VAR model.
+
+    This model fits a linear VAR model parameterized by an underlying covariance matrix.
+    The coefficients of the VAR model are represented as a learned polynomial of the
+    covariance coefficients::
+
+        A[l] = sum(b[l, i] * C ** (i + 1) for i in range(degree))
+
+    for `l = 1, ..., order`, where `C` is the fixed covariance matrix and `b[l, i]` are
+    the learned polynomial coefficients.
+
+    Parameters
+    ----------
+    estimator : estimator object
+        Covariance estimator object implementing `fit()` and having a `covariance_`
+        attribute.
+
+    order : int, default=1
+        VAR model order, i.e. the number of past "lags" to include when predicting a
+        future time point.
+
+    lag : int, default=1
+        Base temporal prediction lag/offset.
+
+    degree : int, default=3
+        Degree of the polynomial re-parameterization.
+
+    alpha : float, default=None
+        Ridge regression penalty parameter on the polynomial coefficients.
+
+    use_precision : bool, default=False
+        Use the covariance estimator's precision (inverse covariance) matrix.
+
+    random_state : int, RandomState instance, default=None
+        The seed of the pseudo random number generator used when sampling.
+        Note that using an int will produce identical results on each call to `sample`.
+        Passing a `RandomState` instance will produce varying but reproducible sampling
+        results.
+
+    Attributes
+    ----------
+    coef_ : array of shape (order, n_targets, n_features)
+        Estimated coefficients for the VAR model. The terms are ordered by increasing
+        lag.  The `i`th row of each term contains the prediction coefficients for the
+        `i`th feature.
+
+    beta_ : array of shape (order, degree)
+        Array of polynomial coefficients.
+
+    rank_ : int
+        Rank of the polynomial regression design matrix.
+
+    singular_ : array of shape (order * degree,)
+        Singular values of the d
+    """
+
     beta_: np.ndarray
+    """Array of polynomial coefficients, shape (order, degree)."""
     rank_: int
+    """Rank of the polynomial regression design matrix."""
     singular_: np.ndarray
+    """Singular values of the design matrix, shape (order * degree,)"""
 
     def __init__(
         self,
@@ -23,8 +83,9 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
         alpha: float | None = None,
         use_precision: bool = False,
         frozen: bool = False,
+        random_state: int | RandomState | None = None,
     ):
-        super().__init__(order=order, lag=lag)
+        super().__init__(order=order, lag=lag, random_state=random_state)
         self.estimator = estimator
         self.degree = degree
         self.alpha = alpha
@@ -34,7 +95,7 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
     def fit(
         self,
         X: np.ndarray,
-        y: np.ndarray | None = None,
+        y: None = None,
         segments: np.ndarray | None = None,
         sample_weight: np.ndarray | None = None,
     ) -> Self:
@@ -60,7 +121,7 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
         self : object
             Returns the instance itself.
         """
-        X_stride, y_shift, sample_weight_shift, _ = _preprocess_data(
+        X_stride, y_shift, _, sample_weight_shift, _ = _preprocess_data(
             X,
             y=None,
             order=self.order,
@@ -72,14 +133,15 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
         # Mask time points that are excluded by sample weight.
         # Nb that only binary sample weight is supported.
         if sample_weight_shift is not None:
-            X_stride = sample_weight_shift[None, :, None] * X_stride
+            X_stride = sample_weight_shift[:, None, None] * X_stride
             y_shift = sample_weight_shift[:, None] * y_shift
 
         if self.frozen:
             check_is_fitted(self.estimator)
-            assert (
-                self.estimator.covariance_.shape[1] == X.shape[1]
-            ), "Shape of frozen covariance estimator doesn't match input data X"
+            if self.estimator.covariance_.shape[1] != X.shape[1]:
+                raise ValueError(
+                    "Shape of frozen covariance estimator doesn't match input data X"
+                )
         else:
             self.estimator.fit(X)
 
@@ -122,6 +184,7 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
 
 
 def _preprocess_covariance(covariance: np.ndarray) -> np.ndarray:
+    """Preprocess covariance matrix for VAR model."""
     assert (
         isinstance(covariance, np.ndarray)
         and covariance.ndim == 2

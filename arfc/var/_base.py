@@ -24,7 +24,9 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
 
     random_state : int, RandomState instance, default=None
         The seed of the pseudo random number generator used when sampling.
-        Pass an int for reproducible output across multiple function calls.
+        Note that using an int will produce identical results on each call to `sample`.
+        Passing a `RandomState` instance will produce varying but reproducible sampling
+        results.
 
     Attributes
     ----------

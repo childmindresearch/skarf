@@ -1,67 +1,36 @@
+from typing import NamedTuple
+
 import numpy as np
-import pandas as pd
 import pytest
-from pytest import FixtureRequest
 
 
-@pytest.fixture(scope="module")
-def rng() -> np.random.Generator:
-    return np.random.default_rng(42)
+class Data(NamedTuple):
+    X: np.ndarray
+    y: np.ndarray | None
+    segments: np.ndarray | None
+    sample_weight: np.ndarray | None
+    groups: np.ndarray | None
 
 
-@pytest.fixture(scope="module")
-def random_single_data(rng: np.random.Generator) -> np.ndarray:
-    X = rng.normal(size=(256, 64))
-    return X
+@pytest.fixture(scope="session")
+def random_data() -> Data:
+    # Random X, y
+    rng = np.random.default_rng(42)
+    n_samples, n_features, n_targets = 64, 16, 8
+    X = rng.normal(size=(n_samples, n_features))
+    y = rng.normal(size=(n_samples, n_targets))
 
-
-@pytest.fixture(
-    scope="module",
-    params=[[128, 256, 192], [128, 128, 128]],
-)
-def random_batch_data(request: FixtureRequest, rng: np.random.Generator) -> np.ndarray:
-    sizes = request.param
-    X = [rng.normal(size=(size, 64)) for size in sizes]
-    X = np.stack(X) if len(set(sizes)) == 1 else np.array(X, dtype=object)
-    return X
-
-
-@pytest.fixture(scope="module")
-def random_group_data(rng: np.random.Generator) -> pd.DataFrame:
-    groups = [1, 1, 2, 2, 3]
-    sizes = [128, 256, 192, 64, 128]
-    X = pd.DataFrame.from_records(
-        [
-            {"group": group, "timeseries": rng.normal(size=(size, 64))}
-            for group, size in zip(groups, sizes)
-        ]
+    # Arbitrary segments
+    lengths = [16, 16, 16, 16]
+    segment_values = [3, 2, 5, 1]
+    segments = np.concatenate(
+        [np.full(length, value) for length, value in zip(lengths, segment_values)]
     )
-    return X
 
+    # Drop random time points
+    sample_weight = np.ones(len(X))
+    sample_weight[[12, 23, 41, 59]] = 0.0
 
-@pytest.fixture(scope="module", params=["single", "batch", "group"])
-def random_data(
-    request: FixtureRequest,
-    random_single_data: np.ndarray,
-    random_batch_data: np.ndarray,
-    random_group_data: pd.DataFrame,
-) -> np.ndarray | pd.DataFrame:
-    data_map = {
-        "single": random_single_data,
-        "batch": random_batch_data,
-        "group": random_group_data,
-    }
-    return data_map[request.param]
-
-
-@pytest.fixture(scope="module")
-def orth_mat_data(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
-    A, _ = np.linalg.qr(rng.normal(size=(64, 64)))
-
-    sample = rng.normal(size=(64,))
-    samples = [sample]
-    for ii in range(1, 256):
-        sample = sample @ A.T
-        samples.append(sample)
-    samples = np.stack(samples)
-    return A, samples
+    # Arbitrary CV groups
+    groups = np.concatenate([np.zeros(32, dtype=np.int64), np.ones(32, dtype=np.int64)])
+    return Data(X, y, segments, sample_weight, groups)
