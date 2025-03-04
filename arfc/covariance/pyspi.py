@@ -20,7 +20,7 @@ try:
 except ImportError:
     _PYSPI_AVAILABLE = False
 
-_LOG = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # Mappings of SPI identifiers to configurations, one per subset.
 # IMO, it would be nice if PySPI provided a way to instantiate individual SPIs. But it
@@ -48,6 +48,12 @@ class SPICovariance(BaseEstimator):
     ----------
     covariance_ : ndarray of shape (n_features, n_features)
         Estimated covariance matrix
+
+    Notes
+    -----
+    Some of the SPI estimators in PySPI are themselves wrappers around sklearn
+    covariance estimators. In those cases, this double wrapping is redundant. We include
+    this wrapper however to have a familiar uniform API for all SPIs.
     """
 
     covariance_: np.ndarray
@@ -129,7 +135,7 @@ def _extract_spi_config_map(
                 try:
                     # Construct the SPI to get its identifier
                     spi = getattr(module, fcn)(**params)
-                    _LOG.info(
+                    _logger.debug(
                         f"Loaded SPI {spi.identifier}: "
                         f"{module_name=}, {fcn=}, {params=}"
                     )
@@ -139,7 +145,7 @@ def _extract_spi_config_map(
                         "params": params,
                     }
                 except Exception:
-                    _LOG.warning(
+                    _logger.warning(
                         f"Encountered error when loading SPI: "
                         f"{module_name=}, {fcn=}, {params=}\n\n"
                         + traceback.format_exc(limit=0)
@@ -189,13 +195,13 @@ def load_spi_config_map(
             spi_config_map_yaml = yaml.safe_load(f)
 
         if spi_config_map_yaml["__pyspi_version__"] != pyspi_version:
-            _LOG.info(
+            _logger.info(
                 "PySPI SPI config map doesn't match installed PySPI version "
                 f"{pyspi_version}; removing."
             )
             path.unlink()
         else:
-            _LOG.info("Loaded PySPI SPI config map from cache: %s", path)
+            _logger.info("Loaded PySPI SPI config map from cache: %s", path)
             spi_config_map = spi_config_map_yaml["configs"]
             _SPI_CONFIG_MAPS[subset] = spi_config_map
             return spi_config_map
@@ -204,7 +210,7 @@ def load_spi_config_map(
     _SPI_CONFIG_MAPS[subset] = spi_config_map
 
     if cache or cache is None:
-        _LOG.info("Caching PySPI SPI config map to %s", path)
+        _logger.info("Caching PySPI SPI config map to %s", path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w") as f:
             spi_config_map_yaml = {
