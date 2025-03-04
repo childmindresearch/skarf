@@ -30,12 +30,12 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
 
         jobs = []
         for X_i, y_i, *params_values_i in _optional_zip(X, y, *params_values):
-            params_i = {k: v for k, v in zip(params, params_values_i)}
-            jobs.append(delayed(self._fit_single)(X_i, y=y_i, **params_i))
+            params_i = {k: v for k, v in zip(params, params_values_i) if v is not None}
+            jobs.append(delayed(self._fit_single)(X=X_i, y=y_i, **params_i))
 
         results = Parallel(n_jobs=self.n_jobs)(jobs)
         self.estimators_ = {
-            sample_id: est for sample_id, est in zip(sample_ids, results)
+            sample_id: estimator for sample_id, estimator in zip(sample_ids, results)
         }
         return self
 
@@ -46,7 +46,6 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
         **params,
     ) -> BaseVAR:
         estimator = clone(self.estimator)
-        params = {k: v for k, v in params.items() if v is not None}
         estimator.fit(X, y=y, **params)
         return estimator
 
@@ -63,7 +62,7 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
             X_pred_i = self.estimators_[sample_id].predict(X_i)
             X_pred.append(X_pred_i)
 
-        X_pred = stack_arrays(X_pred)
+        X_pred = _stack_arrays(X_pred)
         return X_pred
 
     def score(
@@ -71,22 +70,19 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
         X: np.ndarray | pd.Series,
         y: np.ndarray | None = None,
         sample_ids: np.ndarray | None = None,
-        segments: np.ndarray | None = None,
-        sample_weight: np.ndarray | None = None,
+        **params,
     ) -> float:
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
 
+        params_values = list(params.values())
+
         scores, lengths = [], []
-        for sample_id, X_i, y_i, segments_i, sample_weight_i in _optional_zip(
-            sample_ids, X, y, segments, sample_weight
+        for sample_id, X_i, y_i, *params_values_i in _optional_zip(
+            sample_ids, X, y, *params_values
         ):
-            score = self.estimators_[sample_id].score(
-                X=X_i,
-                y=y_i,
-                segments=segments_i,
-                sample_weight=sample_weight_i,
-            )
+            params_i = {k: v for k, v in zip(params, params_values_i) if v is not None}
+            score = self.estimators_[sample_id].score(X=X_i, y=y_i, **params_i)
             scores.append(score)
             lengths.append(len(X_i))
 
@@ -96,25 +92,43 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
         return score
 
     def transform(
-        self, X: np.ndarray, sample_ids: np.ndarray | None = None
+        self,
+        X: np.ndarray | pd.Series,
+        y: np.ndarray | None = None,
+        sample_ids: np.ndarray | None = None,
+        **params,
     ) -> np.ndarray:
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
-        coefs = np.stack(
-            [
-                self._transform_single(sample_id, X_i)
-                for sample_id, X_i in zip(sample_ids, X)
-            ]
-        )
+
+        params_values = list(params.values())
+
+        coefs = []
+        for sample_id, X_i, y_i, *params_values_i in _optional_zip(
+            sample_ids, X, y, *params_values
+        ):
+            params_i = {k: v for k, v in zip(params, params_values_i) if v is not None}
+            coef_i = self._transform_single(
+                X=X_i, y=y_i, sample_id=sample_id, **params_i
+            )
+            coefs.append(coef_i)
+
+        coefs = np.stack(coefs)
         return coefs
 
-    def _transform_single(self, sample_id: int, X_i: np.ndarray) -> np.ndarray:
+    def _transform_single(
+        self,
+        X: np.ndarray,
+        y: np.ndarray | None,
+        sample_id: int,
+        **params,
+    ) -> np.ndarray:
         # fit a new transformation for any unseen samples
         if sample_id not in self.estimators_:
-            self.estimators_[sample_id] = self._fit_single(X_i)
+            self.estimators_[sample_id] = self._fit_single(X, y, **params)
         return self.estimators_[sample_id].coef_.copy()
 
 
-def stack_arrays(arrays: list[np.ndarray]) -> np.ndarray:
+def _stack_arrays(arrays: list[np.ndarray]) -> np.ndarray:
     """Stack arrays of possibly different dimensions."""
     try:
         return np.stack(arrays)
