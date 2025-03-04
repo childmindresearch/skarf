@@ -14,7 +14,7 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         estimator: LinearModel,
         order: int = 1,
         lag: int = 1,
-        mode: Literal["joint", "per_target", "self_repr"] = "joint",
+        mode: Literal["joint", "per_target", "leave_one_out"] = "joint",
         random_state: int | RandomState | None = None,
     ):
         super().__init__(order=order, lag=lag, random_state=random_state)
@@ -26,8 +26,8 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         X: np.ndarray,
         y: np.ndarray | None = None,
         segments: np.ndarray | None = None,
-        groups: np.ndarray | None = None,
         sample_weight: np.ndarray | None = None,
+        groups: np.ndarray | None = None,
     ) -> Self:
         """Fit the model with X.
 
@@ -42,23 +42,27 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         segments : array-like of shape (n_samples,)
             Indicator array of contiguous temporal segments in `X`.
 
-        groups : array-like of shape (n_samples,), default=None
-            Indicator array of CV groups.
-
         sample_weight : array-like of shape (n_samples,), default=None
             Sample weights. Only binary sample weights indicating time points to
             include/exclude are currently supported.
+
+        groups : array-like of shape (n_samples,), default=None
+            Indicator array of CV groups.
 
         Returns
         -------
         self : object
             Returns the instance itself.
         """
-        assert (
-            self.mode != "self_repr" or y is None
-        ), "self_repr not compatible with predicting y targets"
+        if self.mode not in {"joint", "per_target", "leave_one_out"}:
+            raise ValueError(f"Invalid mode '{self.mode}'.")
 
-        X_stride, y_shift, sample_weight_shift, groups_shift = _preprocess_data(
+        if self.mode == "leave_one_out" and y is not None:
+            raise ValueError(
+                "'leave_one_out' mode incompatible with predicting y targets."
+            )
+
+        X_stride, y_shift, _, sample_weight_shift, groups_shift = _preprocess_data(
             X,
             y=y,
             order=self.order,
@@ -68,7 +72,9 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
             groups=groups,
         )
         n_features = X_stride.shape[-1]
-        n_targets = y_shift.shape[-1] if y.ndim == 2 else 1
+        if y_shift.ndim == 1:
+            y_shift = y_shift.reshape(-1, 1)
+        n_targets = y_shift.shape[-1]
 
         params = {}
         if groups_shift is not None:
@@ -76,13 +82,12 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         if sample_weight_shift is not None:
             params["sample_weight"] = sample_weight_shift
 
-        # self-representation mode, where each feature is represented as a linear combo
-        # of other features not including itself, requires per-target fitting.
-        per_target = self.mode in {"per_target", "self_repr"}
-        with_diagonal = self.mode != "self_repr"
+        # leave one out mode, where each feature is represented as a linear combo of
+        # other features not including itself, requires per-target fitting.
+        per_target = self.mode in {"per_target", "leave_one_out"}
+        with_diagonal = self.mode != "leave_one_out"
 
         if per_target:
-            assert y_shift.ndim == 2, "multivariate target expected for per-target fit"
             estimators = [
                 self._fit_component(
                     X_stride, y_shift, index=ii, with_diagonal=with_diagonal, **params
@@ -138,11 +143,15 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         # predict using underlying models
         # should be equivalent to base prediction, but just to be careful
         # (one possible difference is intercept/scaling).
-        if self.mode in {"per_target", "self_repr"}:
+        per_target = self.mode in {"per_target", "leave_one_out"}
+        with_diagonal = self.mode != "leave_one_out"
+        if per_target:
             n_targets = self.coef_.shape[1]
             X_pred = np.stack(
                 [
-                    self._predict_component(X_stride, index=index)
+                    self._predict_component(
+                        X_stride, index=index, with_diagonal=with_diagonal
+                    )
                     for index in range(n_targets)
                 ],
                 axis=-1,
