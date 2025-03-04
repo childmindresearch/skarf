@@ -1,4 +1,4 @@
-from typing import Self
+from typing import Literal, Self
 
 import numpy as np
 from numpy.random import RandomState
@@ -81,6 +81,7 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
         lag: int = 1,
         degree: int = 3,
         alpha: float | None = None,
+        mode: Literal["joint", "leave_one_out"] = "leave_one_out",
         use_precision: bool = False,
         frozen: bool = False,
         random_state: int | RandomState | None = None,
@@ -89,6 +90,7 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
         self.estimator = estimator
         self.degree = degree
         self.alpha = alpha
+        self.mode = mode
         self.use_precision = use_precision
         self.frozen = frozen
 
@@ -121,6 +123,9 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
         self : object
             Returns the instance itself.
         """
+        if self.mode not in {"joint", "leave_one_out"}:
+            raise ValueError(f"Invalid mode '{self.mode}'.")
+
         X_stride, y_shift, _, sample_weight_shift, _ = _preprocess_data(
             X,
             y=None,
@@ -149,7 +154,7 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
             mat = self.estimator.get_precision()
         else:
             mat = self.estimator.covariance_
-        mat = _preprocess_covariance(mat)
+        mat = _preprocess_covariance(mat, with_diagonal=self.mode == "joint")
 
         # pre-compute polynomial ar terms
         pow_mats = np.stack([mat**deg for deg in range(1, self.degree + 1)])
@@ -183,7 +188,9 @@ class CovarianceVAR(BaseVAR, MetaEstimatorMixin):
         return self
 
 
-def _preprocess_covariance(covariance: np.ndarray) -> np.ndarray:
+def _preprocess_covariance(
+    covariance: np.ndarray, with_diagonal: bool = True
+) -> np.ndarray:
     """Preprocess covariance matrix for VAR model."""
     assert (
         isinstance(covariance, np.ndarray)
@@ -192,7 +199,8 @@ def _preprocess_covariance(covariance: np.ndarray) -> np.ndarray:
     ), "covariance matrix not valid"
 
     mat = np.where(np.isnan(covariance), 0.0, covariance)
-    np.fill_diagonal(mat, 0.0)  # ignore diagonal
+    if not with_diagonal:
+        np.fill_diagonal(mat, 0.0)  # ignore diagonal
     mat = mat / np.max(np.abs(mat))  # scale values to [-1, 1]
     mat = np.ascontiguousarray(mat)
     return mat
