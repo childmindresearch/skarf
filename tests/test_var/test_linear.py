@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import LeaveOneGroupOut
+from sklearn.linear_model import LinearRegression, RidgeCV
 from arfc.var.linear_model import LinearVAR
 
 from tests.conftest import Data
@@ -49,3 +50,61 @@ def test_linear_var(random_data: Data, order: int, lag: int, mode: str):
         # underdetermined, idk. Should figure this out.
         if order == 1:
             assert np.allclose(var2.coef_, var.coef_)
+
+
+@pytest.mark.parametrize("mode", ["joint", "per_target"])
+@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("lag", [0, 1])
+def test_linear_var_with_targets(random_data: Data, order: int, lag: int, mode: str):
+    X, y, segments, sample_weight = (
+        random_data.X,
+        random_data.y,
+        random_data.segments,
+        random_data.sample_weight,
+    )
+    n_samples, n_features = X.shape
+    n_targets = y.shape[1]
+
+    random_state = np.random.RandomState(42)
+    var = LinearVAR(
+        LinearRegression(),
+        order=order,
+        lag=lag,
+        mode=mode,
+        random_state=random_state,
+    )
+
+    # Check basic fit.
+    var.fit(X, y=y, segments=segments, sample_weight=sample_weight)
+    assert var.coef_.shape == (order, n_targets, n_features)
+
+
+@pytest.mark.parametrize("mode", ["joint", "per_target", "leave_one_out"])
+@pytest.mark.parametrize("order", [3])
+@pytest.mark.parametrize("lag", [1])
+def test_linear_var_cv(random_data: Data, order: int, lag: int, mode: str):
+    X, segments, sample_weight, groups = (
+        random_data.X,
+        random_data.segments,
+        random_data.sample_weight,
+        random_data.groups,
+    )
+    n_samples, n_features = X.shape
+
+    random_state = np.random.RandomState(42)
+    var = LinearVAR(
+        RidgeCV(alphas=[0.1, 1.0, 10.0], cv=LeaveOneGroupOut()),
+        order=order,
+        lag=lag,
+        mode=mode,
+        random_state=random_state,
+    )
+
+    # Check basic fit.
+    var.fit(X, segments=segments, sample_weight=sample_weight, groups=groups)
+    assert var.coef_.shape == (order, n_features, n_features)
+    if mode == "joint":
+        alphas = np.array([var.estimator.alpha_])
+    else:
+        alphas = np.array([estimator.alpha_ for estimator in var.estimators_])
+    assert np.all(alphas == 10.0)

@@ -77,10 +77,10 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         n_targets = y_shift.shape[-1]
 
         params = {}
-        if groups_shift is not None:
-            params["groups"] = groups_shift
         if sample_weight_shift is not None:
             params["sample_weight"] = sample_weight_shift
+        if groups_shift is not None:
+            params["groups"] = groups_shift
 
         # leave one out mode, where each feature is represented as a linear combo of
         # other features not including itself, requires per-target fitting.
