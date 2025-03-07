@@ -3,12 +3,13 @@ import pytest
 
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.linear_model import LinearRegression, RidgeCV
+from sklearn.utils.estimator_checks import parametrize_with_checks
 from arfc.var.linear_model import LinearVAR
 
 from tests.conftest import Data
 
 
-@pytest.mark.parametrize("mode", ["joint", "per_target", "leave_one_out"])
+@pytest.mark.parametrize("mode", ["full", "per_target", "leave_one_out"])
 @pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("lag", [0, 1])
 def test_linear_var(random_data: Data, order: int, lag: int, mode: str):
@@ -52,7 +53,7 @@ def test_linear_var(random_data: Data, order: int, lag: int, mode: str):
             assert np.allclose(var2.coef_, var.coef_)
 
 
-@pytest.mark.parametrize("mode", ["joint", "per_target"])
+@pytest.mark.parametrize("mode", ["full", "per_target"])
 @pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("lag", [0, 1])
 def test_linear_var_with_targets(random_data: Data, order: int, lag: int, mode: str):
@@ -79,7 +80,7 @@ def test_linear_var_with_targets(random_data: Data, order: int, lag: int, mode: 
     assert var.coef_.shape == (order, n_targets, n_features)
 
 
-@pytest.mark.parametrize("mode", ["joint", "per_target", "leave_one_out"])
+@pytest.mark.parametrize("mode", ["full", "per_target", "leave_one_out"])
 @pytest.mark.parametrize("order", [3])
 @pytest.mark.parametrize("lag", [1])
 def test_linear_var_cv(random_data: Data, order: int, lag: int, mode: str):
@@ -103,8 +104,22 @@ def test_linear_var_cv(random_data: Data, order: int, lag: int, mode: str):
     # Check basic fit.
     var.fit(X, segments=segments, sample_weight=sample_weight, groups=groups)
     assert var.coef_.shape == (order, n_features, n_features)
-    if mode == "joint":
-        alphas = np.array([var.estimator.alpha_])
+    if mode == "full":
+        alphas = np.array([var.estimator_.alpha_])
     else:
         alphas = np.array([estimator.alpha_ for estimator in var.estimators_])
     assert np.all(alphas == 10.0)
+
+
+@parametrize_with_checks(
+    [
+        LinearVAR(LinearRegression()),
+    ],
+    expected_failed_checks=lambda estimator: {
+        "check_sample_weight_equivalence_on_dense_data": "binary sample weights only",
+        "check_sample_weights_list": "binary sample weights only",
+        "check_sample_weights_not_overwritten": "binary sample weights only",
+    },
+)
+def test_sklearn_compatible_estimator(estimator, check):
+    check(estimator)

@@ -13,15 +13,6 @@ from sklearn.utils.validation import check_is_fitted
 
 from ._base import BaseVAR, _preprocess_data
 
-# TODO:
-# - [x] fix score reject y
-# - [] use sklearn.utils.validation.validate_data
-# - [] add docs for generated attributes like n_features_in_
-# - [] don't mutate estimator
-# - [] fix inheritance order (done)
-# - [] accept series inputs
-# - .... rest of the checks
-
 
 class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
     """Covariance based VAR model.
@@ -77,6 +68,13 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         Estimated coefficients for the VAR model. The terms are ordered by increasing
         lag.  The `i`th row of each term contains the prediction coefficients for the
         `i`th feature.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : array of shape (n_features_in_,)
+        Names of features seen during `fit`. Defined only when `X` has feature names
+        that are all strings.
 
     estimator_ : Estimator object
         Fit covariance estimator. If `frozen = True`, then the `estimator` parameter

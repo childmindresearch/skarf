@@ -2,25 +2,96 @@ from typing import Literal, Self
 
 import numpy as np
 from numpy.random import RandomState
-from sklearn.base import MetaEstimatorMixin, clone
+from sklearn.base import MetaEstimatorMixin, clone, _fit_context
 from sklearn.linear_model._base import LinearModel
+from sklearn.utils.validation import validate_data
+from sklearn.utils._param_validation import HasMethods, StrOptions
 
 from ._base import BaseVAR, _preprocess_data
 
 
-class LinearVAR(BaseVAR, MetaEstimatorMixin):
+class LinearVAR(MetaEstimatorMixin, BaseVAR):
+    """Linear VAR model.
+
+    A linear VAR model as a meta-estimator, using sklearn linear models for parameter
+    fitting.
+
+    Parameters
+    ----------
+    estimator : estimator object
+        `LinearModel` estimator object.
+
+    order : int, default=1
+        VAR model order, i.e. the number of past "lags" to include when predicting a
+        future time point.
+
+    lag : int, default=1
+        Base temporal prediction lag/offset.
+
+    mode : {'full', 'per_target', 'leave_one_out'}, default='full'
+        Model fit mode:
+
+        * 'full' : The linear model is fit jointly for all target time series.
+
+        * 'per_target' : A separate linear model is fit for each target. Useful for
+            doing separate cross-validation and hyperparameter tuning for each target
+            time series.
+
+        * 'leave_one_out' : Fit a separate model for each input time series, and exclude
+            the target time series from the model.
+
+    random_state : int, RandomState instance, default=None
+        The seed of the pseudo random number generator used when sampling.
+        Note that using an int will produce identical results on each call to `sample`.
+        Passing a `RandomState` instance will produce varying but reproducible sampling
+        results.
+
+    Attributes
+    ----------
+    coef_ : array of shape (order, n_targets, n_features)
+        Estimated coefficients for the VAR model. The terms are ordered by increasing
+        lag.  The `i`th row of each term contains the prediction coefficients for the
+        `i`th feature.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : array of shape (n_features_in_,)
+        Names of features seen during `fit`. Defined only when `X` has feature names
+        that are all strings.
+
+    estimator_ : Estimator object
+        Fit linear model estimator for `mode = 'full'`.
+
+    estimators_ : list Estimator objects
+        Fit per target linear model estimators for `mode = 'per_target'`, `mode =
+        'leave_one_out'`.
+    """
+
+    _parameter_constraints = {
+        **BaseVAR._parameter_constraints,
+        "estimator": [HasMethods(["fit"])],
+        "mode": [StrOptions({"full", "per_target", "leave_one_out"})],
+    }
+
+    estimator_: LinearModel
+    """Fit linear model estimator. Defined only for `mode = 'full'`."""
+    estimators_: list[LinearModel]
+    """Fit per target linear model estimators. Defined only for `mode != 'joint'`."""
+
     def __init__(
         self,
         estimator: LinearModel,
         order: int = 1,
         lag: int = 1,
-        mode: Literal["joint", "per_target", "leave_one_out"] = "joint",
+        mode: Literal["full", "per_target", "leave_one_out"] = "full",
         random_state: int | RandomState | None = None,
     ):
         super().__init__(order=order, lag=lag, random_state=random_state)
         self.estimator = estimator
         self.mode = mode
 
+    @_fit_context(prefer_skip_nested_validation=True)
     def fit(
         self,
         X: np.ndarray,
@@ -54,13 +125,15 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         self : object
             Returns the instance itself.
         """
-        if self.mode not in {"joint", "per_target", "leave_one_out"}:
-            raise ValueError(f"Invalid mode '{self.mode}'.")
-
         if self.mode == "leave_one_out" and y is not None:
             raise ValueError(
                 "'leave_one_out' mode incompatible with predicting y targets."
             )
+
+        if y is not None:
+            X, y = validate_data(self, X, y, multi_output=True)
+        else:
+            X = validate_data(self, X)
 
         X_stride, y_shift, _, sample_weight_shift, groups_shift = _preprocess_data(
             X,
@@ -110,6 +183,8 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
 
         if per_target:
             self.estimators_ = estimators
+        else:
+            self.estimator_ = estimator
         self.coef_ = coef
         return self
 
@@ -135,9 +210,10 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
         y_shift: np.ndarray,
         **params,
     ) -> LinearModel:
+        estimator = clone(self.estimator)
         X_stride_flat = self._flatten_strided(X_stride)
-        self.estimator.fit(X_stride_flat, y_shift, **params)
-        return self.estimator
+        estimator.fit(X_stride_flat, y_shift, **params)
+        return estimator
 
     def _predict_strided(self, X_stride: np.ndarray) -> np.ndarray:
         # predict using underlying models
@@ -175,7 +251,7 @@ class LinearVAR(BaseVAR, MetaEstimatorMixin):
 
     def _predict_joint(self, X_stride: np.ndarray) -> np.ndarray:
         X_stride_flat = self._flatten_strided(X_stride)
-        X_pred = self.estimator.predict(X_stride_flat)
+        X_pred = self.estimator_.predict(X_stride_flat)
         return X_pred
 
     def _flatten_strided(self, X_stride: np.ndarray) -> np.ndarray:

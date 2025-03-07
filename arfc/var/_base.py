@@ -164,7 +164,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         """
         check_is_fitted(self)
         if y is not None:
-            X, y = validate_data(self, X, y, reset=False)
+            X, y = validate_data(self, X, y, reset=False, multi_output=True)
         else:
             X = validate_data(self, X, reset=False)
 
@@ -256,6 +256,9 @@ def _preprocess_data(
     Sample weights are also temporally expanded so that all samples whose sliding
     prediction window overlaps with an excluded sample are also excluded.
     """
+    min_samples = order + lag + 1
+    if len(X) < min_samples:
+        raise ValueError(f"X has n_samples={len(X)}; at least {min_samples} required.")
     if segments is not None:
         segments = _check_segments(segments, X=X)
     if sample_weight is not None:
