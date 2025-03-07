@@ -1,13 +1,20 @@
 from abc import ABCMeta, abstractmethod
+from numbers import Integral
 from typing import NamedTuple, Self
 
 import numpy as np
 from numpy.random import RandomState
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
-from sklearn.utils.validation import check_is_fitted, check_random_state
+from sklearn.utils.validation import (
+    check_is_fitted,
+    check_random_state,
+    validate_data,
+    _check_sample_weight,
+)
+from sklearn.utils._param_validation import Interval
 
-from ._utils import _tstride, _segments_to_windows
+from ._utils import _tstride, _segments_to_windows, _check_segments
 
 
 class BaseVAR(BaseEstimator, metaclass=ABCMeta):
@@ -34,12 +41,32 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         Estimated coefficients for the VAR model. The terms are ordered by increasing
         lag.  The `i`th row of each term contains the prediction coefficients for the
         `i`th feature.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : array of shape (n_features_in_,)
+        Names of features seen during `fit`. Defined only when `X` has feature names
+        that are all strings.
     """
+
+    _parameter_constraints = {
+        "order": [Interval(Integral, 1, None, closed="left")],
+        "lag": [Interval(Integral, 0, None, closed="left")],
+        "random_state": ["random_state"],
+    }
 
     coef_: np.ndarray
     """Array of VAR coefficients of shape (order, n_targets, n_features)."""
 
+    n_features_in_: int
+    """Number of features seen during `fit`."""
+
+    feature_names_in_: np.ndarray
+    """Names of features seen during `fit`. Defined only when `X` has feature names."""
+
     scoring_function = staticmethod(r2_score)
+    """Static scoring function (default `r2_score`)"""
 
     def __init__(
         self,
@@ -98,6 +125,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         X_pred : array-like of shape (n_samples, n_features)
         """
         check_is_fitted(self)
+        X = validate_data(self, X, reset=False)
         X_stride = _tstride(X, order=self.order, mode="same")
         return self._predict_strided(X_stride)
 
@@ -134,6 +162,12 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         score: float
             Mean VAR prediction score (by default R2, see `scoring_function`).
         """
+        check_is_fitted(self)
+        if y is not None:
+            X, y = validate_data(self, X, y, reset=False)
+        else:
+            X = validate_data(self, X, reset=False)
+
         X_stride, y_shift, _, sample_weight_shift, _ = _preprocess_data(
             X,
             y=y,
@@ -165,6 +199,9 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         X_samples : array-like of shape (n_samples, n_features)
         """
         check_is_fitted(self)
+        if X_init is not None:
+            X_init = validate_data(self, X_init, reset=False)
+
         if self.coef_.shape[1] != self.coef_.shape[2]:
             raise RuntimeError("Sampling requires n_targets == n_features.")
         if self.lag == 0:
@@ -219,6 +256,10 @@ def _preprocess_data(
     Sample weights are also temporally expanded so that all samples whose sliding
     prediction window overlaps with an excluded sample are also excluded.
     """
+    if segments is not None:
+        segments = _check_segments(segments, X=X)
+    if sample_weight is not None:
+        sample_weight = _check_sample_weight(sample_weight, X=X)
     if sample_weight is not None:
         if not np.allclose(sample_weight, sample_weight > 0):
             raise ValueError("Only binary sample_weight supported.")

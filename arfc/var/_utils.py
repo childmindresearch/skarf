@@ -2,6 +2,7 @@ from itertools import repeat
 from typing import Literal
 
 import numpy as np
+from sklearn.utils import check_array
 
 
 def _segments_to_windows(segments: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -77,3 +78,15 @@ def _optional_zip(*arrays):
 
     arrays = [repeat(None, length) if arr is None else arr for arr in arrays]
     yield from zip(*arrays)
+
+
+def _check_segments(segments: np.ndarray, X: np.ndarray) -> np.ndarray:
+    """Check validity of temporal segments array."""
+    segments = check_array(segments, ensure_2d=False, input_name="segments")
+
+    if segments.ndim not in {1, 2}:
+        raise ValueError("Temporal segments must be 1D or 2D array")
+
+    if len(segments) != len(X):
+        raise ValueError("Temporal segments must be same length as X")
+    return segments

@@ -5,6 +5,7 @@ import pytest
 
 from sklearn.covariance import EmpiricalCovariance
 from arfc.var.covariance import CovarianceVAR
+from sklearn.utils.estimator_checks import parametrize_with_checks
 
 from tests.conftest import Data
 
@@ -37,7 +38,7 @@ def test_covariance_var(random_data: Data, order: int, lag: int, degree: int):
     if lag > 0:
         samples = var.sample(n_samples)
         var2 = CovarianceVAR(
-            var.estimator,
+            var.estimator_,
             order=order,
             lag=lag,
             degree=degree,
@@ -65,3 +66,17 @@ def test_covariance_var_ridge(random_data: Data):
     logging.info(f"base l2: {base_ar_l2:.3e}, ridge l2: {ridge_ar_l2:.3e}")
     assert ridge_ar_l2 < 0.001
     assert base_ar_l2 > 0.1
+
+
+@parametrize_with_checks(
+    [
+        CovarianceVAR(EmpiricalCovariance()),
+    ],
+    expected_failed_checks=lambda estimator: {
+        "check_sample_weight_equivalence_on_dense_data": "binary sample weights only",
+        "check_sample_weights_list": "binary sample weights only",
+        "check_sample_weights_not_overwritten": "binary sample weights only",
+    },
+)
+def test_sklearn_compatible_estimator(estimator, check):
+    check(estimator)
