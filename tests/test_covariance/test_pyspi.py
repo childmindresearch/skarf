@@ -4,9 +4,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from sklearn.utils.estimator_checks import parametrize_with_checks
 
 from arfc import set_cache_dir
 from arfc.covariance import pyspi
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -73,3 +75,17 @@ def test_spi_covariance(cache_dir: Path):
         assert cov.covariance_.shape == (n_features, n_features)
         nan_count = np.sum(np.isnan(cov.covariance_))
         logger.info("SPI %s: rt=%.3fs, NaNs=%d", spi, rt, nan_count)
+
+
+@parametrize_with_checks(
+    [
+        pyspi.SPICovariance("cov_EmpiricalCovariance"),
+    ],
+    # expected_failed_checks=lambda estimator: {
+    #     "check_sample_weight_equivalence_on_dense_data": "binary sample weights only",
+    #     "check_sample_weights_list": "binary sample weights only",
+    #     "check_sample_weights_not_overwritten": "binary sample weights only",
+    # },
+)
+def test_sklearn_compatible_estimator(estimator, check):
+    check(estimator)

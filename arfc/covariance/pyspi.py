@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, Self, overload
 
 import numpy as np
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, _fit_context
 from sklearn.utils.validation import validate_data
+from sklearn.utils._param_validation import HasMethods
 
 from arfc import get_cache_dir
 
@@ -49,6 +50,13 @@ class SPICovariance(BaseEstimator):
     covariance_ : ndarray of shape (n_features, n_features)
         Estimated covariance matrix
 
+    n_features_in_ : int
+        Number of features seen during `fit`.
+
+    feature_names_in_ : array of shape (n_features_in_,)
+        Names of features seen during `fit`. Defined only when `X` has feature names
+        that are all strings.
+
     Notes
     -----
     Some of the SPI estimators in PySPI are themselves wrappers around sklearn
@@ -56,11 +64,23 @@ class SPICovariance(BaseEstimator):
     this wrapper however to have a familiar uniform API for all SPIs.
     """
 
+    _parameter_constraints: dict = {
+        "spi": [str, HasMethods("multivariate")],
+    }
+
     covariance_: np.ndarray
+    """Estimated "covariance" matrix, shape (n_features, n_features)"""
+
+    n_features_in_: int
+    """Number of features seen during `fit`."""
+
+    feature_names_in_: np.ndarray
+    """Names of features seen during `fit`. Defined only when `X` has feature names."""
 
     def __init__(self, spi: str | SPI):
         self.spi = spi
 
+    @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X: np.ndarray, y: None = None) -> Self:
         """Fit the underlying PySPI SPI estimator
 
@@ -80,7 +100,8 @@ class SPICovariance(BaseEstimator):
         """
         _check_is_pyspi_available()
         spi = create_spi(self.spi) if isinstance(self.spi, str) else self.spi
-        X = validate_data(self, X)
+        X = validate_data(self, X, ensure_min_features=2, ensure_min_samples=2)
+
         data = Data(X.T, normalise=False)
         covariance = spi.multivariate(data)
         self.covariance_ = covariance
