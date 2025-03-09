@@ -123,6 +123,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         Returns
         -------
         X_pred : array-like of shape (n_samples, n_features)
+            Next time step predictions, same shape as ``X``.
         """
         check_is_fitted(self)
         X = validate_data(self, X, reset=False)

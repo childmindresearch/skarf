@@ -1,8 +1,15 @@
+import numbers
 from typing import Any, Self
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, MetaEstimatorMixin, TransformerMixin, clone
+from sklearn.base import (
+    BaseEstimator,
+    MetaEstimatorMixin,
+    TransformerMixin,
+    clone,
+    _fit_context,
+)
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.parallel import Parallel, delayed
 
@@ -10,43 +17,139 @@ from ._base import BaseVAR
 from ._utils import _optional_zip
 
 
-class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
+class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
+    """Multi-sample VAR model.
+
+    Fit a separate VAR model for each sample (e.g. subject) in a dataset.
+
+    Parameters
+    ----------
+    estimator : estimator object
+        VAR estimator object.
+
+    n_jobs : int, default=None
+        Number of jobs to run in parallel.
+        ``None`` means 1 unless in a ``joblib.parallel_backend`` context.
+        ``-1`` means using all processors.
+
+    Attributes
+    ----------
+    estimators_ : dict of estimators
+        Dict mapping sample IDs to fit VAR estimators.
+    """
+
+    _parameter_constraints = {"n_jobs": [numbers.Integral, None]}
+
     estimators_: dict[int, BaseVAR]
+    """Mapping of sample IDs to fit VAR estimators."""
 
     def __init__(self, estimator: BaseVAR, n_jobs: int | None = None):
         self.estimator = estimator
         self.n_jobs = n_jobs
 
+    @_fit_context(prefer_skip_nested_validation=False)
     def fit(
         self,
         X: np.ndarray | pd.Series,
-        y: np.ndarray | None = None,
+        y: None = None,
         sample_ids: np.ndarray | None = None,
         **params,
     ) -> Self:
-        X, sample_ids = _check_X_sample_ids(X, sample_ids)
+        """Fit the model with X.
 
-        params_values = list(params.values())
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, sequence_length, n_features)
+            Array of multiple training multivariate time series. If the sequences are
+            different length, ``X`` should be a 1D ndarray of dtype object, where each
+            element is a 2D array. ``X`` may also be a pandas ``Series`` object, with
+            its index encoding each sample ID (e.g. subject ID).
 
-        jobs = []
-        for X_i, y_i, *params_values_i in _optional_zip(X, y, *params_values):
-            params_i = {k: v for k, v in zip(params, params_values_i) if v is not None}
-            jobs.append(delayed(self._fit_single)(X=X_i, y=y_i, **params_i))
+        y : Ignored
+            Ignored
 
-        results = Parallel(n_jobs=self.n_jobs)(jobs)
-        self.estimators_ = {
-            sample_id: estimator for sample_id, estimator in zip(sample_ids, results)
-        }
+        sample_ids : array of shape (n_samples,), default=None
+            Array of sample IDs (e.g. subject ID) for each training time series. If
+            ``None``, the sample IDs will be extracted from the index of ``X`` in case
+            ``X`` is a ``Series``. Otherwise, sample IDs ``0, ..., n_samples - 1`` are
+            assumed.
+
+        **params : dict of str -> object
+            Parameters to pass through to the underlying VAR ``fit()`` method.
+
+        Returns
+        -------
+        self : object
+            Returns the instance itself.
+        """
+        X, sample_ids = _check_X_sample_ids(X, sample_ids, unique=True)
+        self.estimators_ = self._batch_fit(X, sample_ids=sample_ids, **params)
         return self
 
-    def _fit_single(
+    def partial_fit(
+        self,
+        X: np.ndarray | pd.Series,
+        y: None = None,
+        sample_ids: np.ndarray | None = None,
+        **params,
+    ) -> Self:
+        """Partial model fit for new samples.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, sequence_length, n_features)
+            Array of multiple multivariate time series. If the sequences are different
+            length, ``X`` should be a 1D ndarray of dtype object, where each element is
+            a 2D array. ``X`` may also be a pandas ``Series`` object, with its index
+            encoding each sample ID (e.g. subject ID). Should contain new sample time
+            series not in training data.
+
+        y : Ignored
+            Ignored
+
+        sample_ids : array of shape (n_samples,), default=None
+            Array of sample IDs (e.g. subject ID) for each training time series. If
+            ``None``, the sample IDs will be extracted from the index of ``X`` in case
+            ``X`` is a ``Series``. Otherwise, sample IDs ``0, ..., n_samples - 1`` are
+            assumed. Should contain new sample IDs not in training data.
+
+        **params : dict of str -> object
+            Parameters to pass through to the underlying VAR ``fit()`` method.
+
+        Returns
+        -------
+        self : object
+            Returns the instance itself.
+        """
+        check_is_fitted(self)
+        X, sample_ids = _check_X_sample_ids(X, sample_ids, unique=True)
+
+        for sample_id in sample_ids:
+            if sample_id in self.estimators_:
+                raise ValueError(f"Sample ID {sample_id} already fit.")
+
+        estimators = self._batch_fit(X, sample_ids=sample_ids, **params)
+        self.estimators_.update(estimators)
+        return self
+
+    def _batch_fit(
         self,
         X: np.ndarray,
-        y: np.ndarray | None,
+        sample_ids: np.ndarray,
         **params,
-    ) -> BaseVAR:
+    ) -> dict[int, BaseVAR]:
+        params_values = list(params.values())
+        jobs = []
+        for X_i, *params_values_i in _optional_zip(X, *params_values):
+            params_i = {k: v for k, v in zip(params, params_values_i) if v is not None}
+            jobs.append(delayed(self._fit_single)(X=X_i, **params_i))
+        results = Parallel(n_jobs=self.n_jobs)(jobs)
+        estimators = dict(zip(sample_ids, results))
+        return estimators
+
+    def _fit_single(self, X: np.ndarray, **params) -> BaseVAR:
         estimator = clone(self.estimator)
-        estimator.fit(X, y=y, **params)
+        estimator.fit(X, **params)
         return estimator
 
     def predict(
@@ -54,6 +157,29 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
         X: np.ndarray | pd.Series,
         sample_ids: np.ndarray | None = None,
     ) -> np.ndarray:
+        """Predict time series values for next time steps.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, sequence_length, n_features)
+            Array of multiple multivariate time series. If the sequences are different
+            length, ``X`` should be a 1D ndarray of dtype object, where each element is
+            a 2D array. ``X`` may also be a pandas ``Series`` object, with its index
+            encoding each sample ID (e.g. subject ID).
+
+        sample_ids : array of shape (n_samples,), default=None
+            Array of sample IDs (e.g. subject ID) for each training time series. If
+            ``None``, the sample IDs will be extracted from the index of ``X`` in case
+            ``X`` is a ``Series``. Otherwise, sample IDs ``0, ..., n_samples - 1`` are
+            assumed.
+
+        Returns
+        -------
+        X_pred : array-like of shape (n_samples, sequence_length, n_features)
+            Next time step predictions for each input time series in ``X``. For each
+            time series, the estimator for the corresponding sample ID is used for
+            prediction.
+        """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
 
@@ -61,28 +187,54 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
         for sample_id, X_i in zip(sample_ids, X):
             X_pred_i = self.estimators_[sample_id].predict(X_i)
             X_pred.append(X_pred_i)
-
         X_pred = _stack_arrays(X_pred)
         return X_pred
 
     def score(
         self,
         X: np.ndarray | pd.Series,
-        y: np.ndarray | None = None,
+        y: None = None,
         sample_ids: np.ndarray | None = None,
         **params,
     ) -> float:
+        """Return the prediction score for the model (by default R2).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, sequence_length, n_features)
+            Array of multiple multivariate time series. If the sequences are different
+            length, ``X`` should be a 1D ndarray of dtype object, where each element is
+            a 2D array. ``X`` may also be a pandas ``Series`` object, with its index
+            encoding each sample ID (e.g. subject ID).
+
+        y : Ignored
+            Ignored
+
+        sample_ids : array of shape (n_samples,), default=None
+            Array of sample IDs (e.g. subject ID) for each training time series. If
+            ``None``, the sample IDs will be extracted from the index of ``X`` in case
+            ``X`` is a ``Series``. Otherwise, sample IDs ``0, ..., n_samples - 1`` are
+            assumed.
+
+        **params : dict of str -> object
+            Parameters to pass through to the underlying VAR ``score()`` method.
+
+        Returns
+        -------
+        score: float
+            Mean VAR prediction score (by default R2, see
+            ``estimator.scoring_function``).
+        """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
 
         params_values = list(params.values())
-
         scores, lengths = [], []
-        for sample_id, X_i, y_i, *params_values_i in _optional_zip(
-            sample_ids, X, y, *params_values
+        for sample_id, X_i, *params_values_i in _optional_zip(
+            sample_ids, X, *params_values
         ):
             params_i = {k: v for k, v in zip(params, params_values_i) if v is not None}
-            score = self.estimators_[sample_id].score(X=X_i, y=y_i, **params_i)
+            score = self.estimators_[sample_id].score(X=X_i, **params_i)
             scores.append(score)
             lengths.append(len(X_i))
 
@@ -94,38 +246,43 @@ class MultiVAR(BaseEstimator, MetaEstimatorMixin, TransformerMixin):
     def transform(
         self,
         X: np.ndarray | pd.Series,
-        y: np.ndarray | None = None,
         sample_ids: np.ndarray | None = None,
-        **params,
     ) -> np.ndarray:
-        X, sample_ids = _check_X_sample_ids(X, sample_ids)
+        """Return the learned VAR coefficient features for each sample time series.
 
-        params_values = list(params.values())
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, sequence_length, n_features)
+            Array of multiple multivariate time series. If the sequences are different
+            length, ``X`` should be a 1D ndarray of dtype object, where each element is
+            a 2D array. ``X`` may also be a pandas ``Series`` object, with its index
+            encoding each sample ID (e.g. subject ID). All sample time series should
+            already be fit with ``fit()`` or ``partial_fit()``.
 
-        coefs = []
-        for sample_id, X_i, y_i, *params_values_i in _optional_zip(
-            sample_ids, X, y, *params_values
-        ):
-            params_i = {k: v for k, v in zip(params, params_values_i) if v is not None}
-            coef_i = self._transform_single(
-                X=X_i, y=y_i, sample_id=sample_id, **params_i
-            )
-            coefs.append(coef_i)
+        sample_ids : array of shape (n_samples,), default=None
+            Array of sample IDs (e.g. subject ID) for each training time series. If
+            ``None``, the sample IDs will be extracted from the index of ``X`` in case
+            ``X`` is a ``Series``. Otherwise, sample IDs ``0, ..., n_samples - 1`` are
+            assumed. All sample IDs should have already been seen during ``fit()`` or
+            ``partial_fit()``.
 
-        coefs = np.stack(coefs)
-        return coefs
+        Returns
+        -------
+        coef : array of shape (n_samples, order, n_features, n_features)
+            Array of VAR coefficients for each sample time series, to use as features.
+        """
+        check_is_fitted(self)
+        _, sample_ids = _check_X_sample_ids(X, sample_ids)
 
-    def _transform_single(
-        self,
-        X: np.ndarray,
-        y: np.ndarray | None,
-        sample_id: int,
-        **params,
-    ) -> np.ndarray:
-        # fit a new transformation for any unseen samples
-        if sample_id not in self.estimators_:
-            self.estimators_[sample_id] = self._fit_single(X, y, **params)
-        return self.estimators_[sample_id].coef_.copy()
+        for sample_id in sample_ids:
+            if sample_id not in self.estimators_:
+                raise ValueError(
+                    f"Sample ID {sample_id} not seen during fit; "
+                    "you probably need to call partial_fit."
+                )
+
+        coef = np.stack([self.estimators_[sample_id].coef_ for sample_id in sample_ids])
+        return coef
 
 
 def _stack_arrays(arrays: list[np.ndarray]) -> np.ndarray:
@@ -140,12 +297,17 @@ def _stack_arrays(arrays: list[np.ndarray]) -> np.ndarray:
 
 
 def _check_X_sample_ids(
-    X: np.ndarray | pd.Series, sample_ids: np.ndarray | None
+    X: np.ndarray | pd.Series,
+    sample_ids: np.ndarray | None,
+    *,
+    unique: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Check input X and sample IDs.
 
     If X is a pandas Series and sample_ids is None the series index is used as the
     sample ID.
+
+    ``unique = True`` enforces that all sample IDs are unique.
     """
     if _is_series_like(X):
         if sample_ids is None:
@@ -153,6 +315,13 @@ def _check_X_sample_ids(
         X = np.asanyarray(X.values)
     elif sample_ids is None:
         sample_ids = np.arange(len(X))
+
+    sample_ids = np.asanyarray(sample_ids)
+
+    if sample_ids.ndim != 1:
+        raise ValueError("Expected 1D sample IDs.")
+    if unique and len(np.unique(sample_ids)) < len(sample_ids):
+        raise ValueError("Sample IDs contain duplicates.")
     return X, sample_ids
 
 

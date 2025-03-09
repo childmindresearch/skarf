@@ -91,7 +91,7 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
         self.estimator = estimator
         self.mode = mode
 
-    @_fit_context(prefer_skip_nested_validation=True)
+    @_fit_context(prefer_skip_nested_validation=False)
     def fit(
         self,
         X: np.ndarray,
