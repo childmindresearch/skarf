@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-import arfc.var._utils as ut
+import skarf.var._utils as ut
 
 
 def test_segments_to_windows():

@@ -3,8 +3,8 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import LinearRegression
 
-from arfc.var.multi import MultiVAR, _stack_arrays
-from arfc.var.linear_model import LinearVAR
+from skarf.var.multi import MultiVAR, _stack_arrays
+from skarf.var.linear_model import LinearVAR
 
 from tests.conftest import Data
 

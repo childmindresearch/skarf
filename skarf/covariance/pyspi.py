@@ -11,7 +11,7 @@ from sklearn.base import BaseEstimator, _fit_context
 from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods
 
-from arfc import get_cache_dir
+from skarf import get_cache_dir
 
 try:
     import pyspi  # noqa

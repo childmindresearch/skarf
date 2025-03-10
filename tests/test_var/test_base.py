@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from arfc.var._base import BaseVAR, _align_X_y, _preprocess_data
+from skarf.var._base import BaseVAR, _align_X_y, _preprocess_data
 
 from tests.conftest import Data
 

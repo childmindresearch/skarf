@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from sklearn.utils.estimator_checks import parametrize_with_checks
 
-from arfc import set_cache_dir
-from arfc.covariance import pyspi
+from skarf import set_cache_dir
+from skarf.covariance import pyspi
 
 
 logging.basicConfig(level=logging.INFO)

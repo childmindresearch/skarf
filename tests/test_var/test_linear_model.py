@@ -4,7 +4,7 @@ import pytest
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.utils.estimator_checks import parametrize_with_checks
-from arfc.var.linear_model import LinearVAR
+from skarf.var.linear_model import LinearVAR
 
 from tests.conftest import Data
 
