@@ -9,7 +9,7 @@ authors = [
     {name = "Connor Lane", email = "connor.lane858@gmail.com"},
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = {text = "MIT License"}
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -30,11 +30,15 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
+pyspi = [
+    "pyspi",
+]
 test = [
     "pytest",
     "pytest-cov",
 ]
 dev = [
+    "ruff==0.9.10",
     "pre-commit",
     "setuptools-scm",
 ]
@@ -48,10 +52,9 @@ include = ["skarf*"]
 [tool.setuptools_scm]
 write_to = "skarf/_version.py"
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target_version = ['py311']
-
+target-version = "py311"
 
 [tool.pytest.ini_options]
 log_cli = true

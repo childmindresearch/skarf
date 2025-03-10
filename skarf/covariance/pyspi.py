@@ -33,8 +33,7 @@ _SPI_CONFIG_MAPS = {}
 class SPI(Protocol):
     """Abstract minimal interface for PySPI SPI object."""
 
-    def multivariate(self, data: Data) -> np.ndarray:
-        ...
+    def multivariate(self, data: Data) -> np.ndarray: ...
 
 
 class SPICovariance(BaseEstimator):
