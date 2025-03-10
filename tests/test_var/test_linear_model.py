@@ -1,12 +1,16 @@
 import numpy as np
 import pytest
 
+import sklearn
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.utils.estimator_checks import parametrize_with_checks
 from skarf.var.linear_model import LinearVAR
 
 from tests.conftest import Data
+
+# Needed for RidgeCV groups routing
+sklearn.set_config(enable_metadata_routing=True)
 
 
 @pytest.mark.parametrize("mode", ["full", "per_target", "leave_one_out"])

@@ -3,6 +3,7 @@ from typing import Any, Self
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 from sklearn.base import (
     BaseEstimator,
     MetaEstimatorMixin,
@@ -10,8 +11,9 @@ from sklearn.base import (
     clone,
     _fit_context,
 )
-from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.validation import check_is_fitted, check_array, validate_data
 from sklearn.utils.parallel import Parallel, delayed
+from sklearn.utils._param_validation import HasMethods
 
 from ._base import BaseVAR
 from ._utils import _optional_zip
@@ -36,12 +38,21 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
     ----------
     estimators_ : dict of estimators
         Dict mapping sample IDs to fit VAR estimators.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
     """
 
-    _parameter_constraints = {"n_jobs": [numbers.Integral, None]}
+    _parameter_constraints = {
+        "estimator": [HasMethods(["fit"])],
+        "n_jobs": [numbers.Integral, None],
+    }
 
     estimators_: dict[int, BaseVAR]
     """Mapping of sample IDs to fit VAR estimators."""
+
+    n_features_in_: int
+    """Number of features seen during `fit`."""
 
     def __init__(self, estimator: BaseVAR, n_jobs: int | None = None):
         self.estimator = estimator
@@ -83,10 +94,12 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
             Returns the instance itself.
         """
         X, sample_ids = _check_X_sample_ids(X, sample_ids, unique=True)
+        # Check the first sample time series, sets n_features_in_
+        validate_data(self, X[0])
         self.estimators_ = self._batch_fit(X, sample_ids=sample_ids, **params)
         return self
 
-    def partial_fit(
+    def incremental_fit(
         self,
         X: np.ndarray | pd.Series,
         y: None = None,
@@ -123,6 +136,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids, unique=True)
+        validate_data(self, X[0], reset=False)
 
         for sample_id in sample_ids:
             if sample_id in self.estimators_:
@@ -182,6 +196,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
+        validate_data(self, X[0], reset=False)
 
         X_pred = []
         for sample_id, X_i in zip(sample_ids, X):
@@ -227,6 +242,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
+        validate_data(self, X[0], reset=False)
 
         params_values = list(params.values())
         scores, lengths = [], []
@@ -257,14 +273,14 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
             length, ``X`` should be a 1D ndarray of dtype object, where each element is
             a 2D array. ``X`` may also be a pandas ``Series`` object, with its index
             encoding each sample ID (e.g. subject ID). All sample time series should
-            already be fit with ``fit()`` or ``partial_fit()``.
+            already be fit with ``fit()`` or ``incremental_fit()``.
 
         sample_ids : array of shape (n_samples,), default=None
             Array of sample IDs (e.g. subject ID) for each training time series. If
             ``None``, the sample IDs will be extracted from the index of ``X`` in case
             ``X`` is a ``Series``. Otherwise, sample IDs ``0, ..., n_samples - 1`` are
             assumed. All sample IDs should have already been seen during ``fit()`` or
-            ``partial_fit()``.
+            ``incremental_fit()``.
 
         Returns
         -------
@@ -272,28 +288,18 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
             Array of VAR coefficients for each sample time series, to use as features.
         """
         check_is_fitted(self)
-        _, sample_ids = _check_X_sample_ids(X, sample_ids)
+        X, sample_ids = _check_X_sample_ids(X, sample_ids)
+        validate_data(self, X[0], reset=False)
 
         for sample_id in sample_ids:
             if sample_id not in self.estimators_:
                 raise ValueError(
                     f"Sample ID {sample_id} not seen during fit; "
-                    "you probably need to call partial_fit."
+                    "you probably need to call incremental_fit."
                 )
 
         coef = np.stack([self.estimators_[sample_id].coef_ for sample_id in sample_ids])
         return coef
-
-
-def _stack_arrays(arrays: list[np.ndarray]) -> np.ndarray:
-    """Stack arrays of possibly different dimensions."""
-    try:
-        return np.stack(arrays)
-    except ValueError:
-        # https://stackoverflow.com/a/68824867
-        stacked = np.empty(len(arrays), dtype=object)
-        stacked[:] = arrays
-        return stacked
 
 
 def _check_X_sample_ids(
@@ -312,17 +318,54 @@ def _check_X_sample_ids(
     if _is_series_like(X):
         if sample_ids is None:
             sample_ids = np.asanyarray(X.index)
-        X = np.asanyarray(X.values)
-    elif sample_ids is None:
-        sample_ids = np.arange(len(X))
+        X = X.values
 
-    sample_ids = np.asanyarray(sample_ids)
+    if sp.issparse(X):
+        raise TypeError("Sparse X not supported.")
+
+    X = np.asanyarray(X)
+    if X.ndim not in {1, 3}:
+        raise ValueError(
+            f"Invalid X shape {X.shape}; expected 1D array of arrays "
+            "or 3D array of shape (n_samples, sequence_length, n_features)."
+        )
+
+    if sample_ids is None:
+        sample_ids = np.arange(len(X))
+    else:
+        sample_ids = np.asanyarray(sample_ids)
 
     if sample_ids.ndim != 1:
         raise ValueError("Expected 1D sample IDs.")
     if unique and len(np.unique(sample_ids)) < len(sample_ids):
         raise ValueError("Sample IDs contain duplicates.")
+    if len(sample_ids) != len(X):
+        raise ValueError("Lengths of X and sample_ids don't match")
+
+    # Check individual time series in case of a 1D array of arrays.
+    if X.ndim == 1:
+        X_ = []
+        n_features = set()
+        for sample_id, X_i in zip(sample_ids, X):
+            X_i = check_array(X_i, input_name=f"sample {sample_id}")
+            X_.append(X_i)
+            n_features.add(X_i.shape[-1])
+        if len(n_features) > 1:
+            raise ValueError("All samples should have the same number of features")
+        X = _stack_arrays(X_)
+
     return X, sample_ids
+
+
+def _stack_arrays(arrays: list[np.ndarray]) -> np.ndarray:
+    """Stack arrays of possibly different dimensions."""
+    try:
+        return np.stack(arrays)
+    except ValueError:
+        # https://stackoverflow.com/a/68824867
+        stacked = np.empty(len(arrays), dtype=object)
+        stacked[:] = arrays
+        return stacked
 
 
 def _is_series_like(obj: Any) -> bool:

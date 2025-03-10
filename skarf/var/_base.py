@@ -7,6 +7,7 @@ from numpy.random import RandomState
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 from sklearn.utils.validation import (
+    check_array,
     check_is_fitted,
     check_random_state,
     validate_data,
@@ -258,8 +259,8 @@ def _preprocess_data(
     prediction window overlaps with an excluded sample are also excluded.
     """
     min_samples = order + lag + 1
-    if len(X) < min_samples:
-        raise ValueError(f"X has n_samples={len(X)}; at least {min_samples} required.")
+    X = check_array(X, ensure_min_samples=min_samples)
+
     if segments is not None:
         segments = _check_segments(segments, X=X)
     if sample_weight is not None:

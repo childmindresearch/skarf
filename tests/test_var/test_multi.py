@@ -8,6 +8,12 @@ from skarf.var.linear_model import LinearVAR
 
 from tests.conftest import Data
 
+# NOTE: not checking sklearn estimator checks for MultiVAR because of the atypical input
+# shape. MultiVAR expects either a 1D array of 2D arrays, each shape (sequence_length,
+# n_features), or a 3D array of shape (n_samples, sequence_length, n_features). The
+# estimator checks all use a standard input X shape (n_samples, n_features), which is
+# incompatible.
+
 
 @pytest.mark.parametrize(
     "sample_ids_type", ["none", "array", "list", "series", "string"]
@@ -58,3 +64,6 @@ def test_multi_var(
 
     X_transformed = var.transform(X, sample_ids=sample_ids)
     assert X_transformed.shape == (len(X), var.estimator.order, n_features, n_features)
+
+    var.incremental_fit(X[:1], sample_ids=[len(X) + 2])
+    assert len(var.estimators_) == len(X) + 1

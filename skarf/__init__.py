@@ -1,9 +1,6 @@
 from pathlib import Path
 
 import platformdirs
-import sklearn
-
-sklearn.set_config(enable_metadata_routing=True)
 
 _CACHE_DIR = Path(platformdirs.user_cache_dir()) / __package__
 
