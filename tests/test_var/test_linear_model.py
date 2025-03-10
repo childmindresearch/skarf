@@ -6,6 +6,7 @@ from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.utils.estimator_checks import parametrize_with_checks
 from skarf.var.linear_model import LinearVAR
+from statsmodels.tsa.api import VAR
 
 from tests.conftest import Data
 
@@ -113,6 +114,17 @@ def test_linear_var_cv(random_data: Data, order: int, lag: int, mode: str):
     else:
         alphas = np.array([estimator.alpha_ for estimator in var.estimators_])
     assert np.all(alphas == 10.0)
+
+
+def test_linear_var_statsmodels_consistency(random_data: Data):
+    X = random_data.X
+
+    var_ref = VAR(X).fit(1)
+    coef_ref = var_ref.coefs
+
+    var = LinearVAR(LinearRegression()).fit(X)
+    coef = var.coef_
+    assert np.allclose(coef, coef_ref)
 
 
 @parametrize_with_checks(
