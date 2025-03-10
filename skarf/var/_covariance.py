@@ -17,9 +17,9 @@ from ._base import BaseVAR, _preprocess_data
 class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
     """Covariance based VAR model.
 
-    This model fits a linear VAR model parameterized by an underlying covariance matrix.
+    Thsi model fits a linear VAR model parameterized by an underlying covariance matrix.
     The coefficients of the VAR model are represented as a learned polynomial of the
-    covariance coefficjients::
+    covariance coefficients::
 
         A[l] = sum(b[l, i] * C ** (i + 1) for i in range(degree))
 

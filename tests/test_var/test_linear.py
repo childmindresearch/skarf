@@ -5,7 +5,7 @@ import sklearn
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.utils.estimator_checks import parametrize_with_checks
-from skarf.var.linear_model import LinearVAR
+from skarf.var._linear import LinearVAR
 from statsmodels.tsa.api import VAR
 
 from tests.conftest import Data

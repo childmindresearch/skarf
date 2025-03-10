@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from sklearn.covariance import EmpiricalCovariance
-from skarf.var.covariance import CovarianceVAR
+from skarf.var._covariance import CovarianceVAR
 from sklearn.utils.estimator_checks import parametrize_with_checks
 
 from tests.conftest import Data
