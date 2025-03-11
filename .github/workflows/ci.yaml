@@ -25,12 +25,9 @@ jobs:
         run: |
           uv run ruff check skarf tests
           uv run ruff format --check skarf tests
-      - name: Run full tests
-        run: uv run pytest --cov=skarf tests
-      - name: Run tests (no pyspi)
+      - name: Run tests
         run: |
-          uv sync --group test
-          uv run --no-group pyspi pytest tests
+          uv run pytest --cov=skarf tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
