@@ -1,3 +1,5 @@
+"""Regularized linear VAR models."""
+
 from typing import Literal, Self
 
 import numpy as np
@@ -33,11 +35,11 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
 
         * 'full' : The linear model is fit jointly for all target time series.
 
-        * 'per_target' : A separate linear model is fit for each target. Useful for
-            doing separate cross-validation and hyperparameter tuning for each target
+        * 'per_target' : A separate linear model is fit for each target. Useful for\
+            doing separate cross-validation and hyperparameter tuning for each target\
             time series.
 
-        * 'leave_one_out' : Fit a separate model for each input time series, and exclude
+        * 'leave_one_out' : Fit a separate model for each input time series, and exclude\
             the target time series from the model.
 
     random_state : int, RandomState instance, default=None
@@ -56,7 +58,7 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
     n_features_in_ : int
         Number of features seen during :term:`fit`.
 
-    feature_names_in_ : array of shape (n_features_in_,)
+    feature_names_in_ : array of shape (`n_features_in_`,)
         Names of features seen during `fit`. Defined only when `X` has feature names
         that are all strings.
 

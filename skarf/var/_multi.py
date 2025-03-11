@@ -1,3 +1,5 @@
+"""Fit a separate VAR model for each sample (e.g. subject) in a dataset."""
+
 import numbers
 from typing import Any, Self
 

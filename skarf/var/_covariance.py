@@ -1,3 +1,5 @@
+"""Adapt a covariance matrix as a linear VAR model via a polynomial fit."""
+
 from copy import deepcopy
 from numbers import Integral, Real
 from typing import Literal, Self
@@ -53,7 +55,7 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
 
         * 'full' : Use the full covariance.
 
-        * 'leave_one_out' : Zero the diagonal of the covariance before model fitting. This
+        * 'leave_one_out' : Zero the diagonal of the covariance before model fitting. This\
             prevents autocorrelation from improving model fit.
 
     random_state : int, RandomState instance, default=None
@@ -72,7 +74,7 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
     n_features_in_ : int
         Number of features seen during :term:`fit`.
 
-    feature_names_in_ : array of shape (n_features_in_,)
+    feature_names_in_ : array of shape (`n_features_in_`,)
         Names of features seen during `fit`. Defined only when `X` has feature names
         that are all strings.
 

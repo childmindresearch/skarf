@@ -42,3 +42,7 @@ slurm-*
 # Data
 data/
 output/
+
+# Sphinx documentation
+doc/_build/
+doc/**/generated
