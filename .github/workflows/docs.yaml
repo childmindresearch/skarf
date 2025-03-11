@@ -1,0 +1,48 @@
+name: docs 
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types:
+    - completed
+    branches:
+    - main
+    - docs
+
+jobs:
+  # Build the documentation and upload the static HTML files as an artifact.
+  build:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the project
+        run: uv sync --only-group doc
+      - name: Build docs
+        run: cd doc && uv run make html
+      - uses: actions/upload-pages-artifact@v2
+        with:
+          path: doc/_build/html
+
+  # Deploy the artifact to GitHub pages.
+  # This is a separate job so that only actions/deploy-pages has the necessary permissions.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v2
