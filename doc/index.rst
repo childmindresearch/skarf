@@ -37,7 +37,7 @@ on top of `scikit-learn <https://scikit-learn.org>`_.
             :color: secondary
             :expand:
 
-            To the getting started guideline
+            To the getting started guide
 
     .. grid-item-card::  User guide
         :img-top: _static/img/index_user_guide.svg
@@ -72,7 +72,7 @@ on top of `scikit-learn <https://scikit-learn.org>`_.
             :color: secondary
             :expand:
 
-            To the reference guide
+            To the API reference
 
     .. grid-item-card::  Examples
         :img-top: _static/img/index_examples.svg
