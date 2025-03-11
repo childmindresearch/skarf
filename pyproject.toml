@@ -38,7 +38,9 @@ dependencies = [
 [dependency-groups]
 pyspi = [
     "pyspi",
-    "setuptools",  # pyspi missing pkg_resources dependency (?)
+    # Extra dependency constraints found to be needed.
+    "ipython<9",
+    "setuptools",
 ]
 test = [
     "pytest>=8.3.5",
