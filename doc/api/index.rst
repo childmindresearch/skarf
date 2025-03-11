@@ -71,7 +71,7 @@ Covariance estimators
 PySPI covariance estimators
 ---------------------------
 
-.. automodule:: skarf.covariance.pyspi
+.. automodule:: skarf.covariance._pyspi
    :no-members:
    :no-inherited-members:
 
@@ -81,14 +81,14 @@ PySPI covariance estimators
    :toctree: generated/
    :template: class.rst
 
+   SPI
    SPICovariance
-
-.. currentmodule:: skarf.covariance.pyspi
 
 .. autosummary::
    :toctree: generated/
    :template: functions.rst
 
    create_spi
+   create_spi_from_config
    list_available_spis
    load_spi_config_map
