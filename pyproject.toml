@@ -30,6 +30,7 @@ classifiers = [
 
 dependencies = [
     "numpy<2",
+    "pandas",
     "scikit-learn>=1.6.0",
     "scipy",
 ]
@@ -37,11 +38,15 @@ dependencies = [
 [dependency-groups]
 pyspi = [
     "pyspi",
+    "setuptools",  # pyspi missing pkg_resources dependency (?)
+]
+test = [
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "statsmodels>=0.14.4",
 ]
 dev = [
     "pre-commit>=4.1.0",
-    "pytest>=8.3.5",
-    "pytest-cov>=6.0.0",
     "ruff>=0.9.10",
 ]
 doc = [

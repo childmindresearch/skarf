@@ -1859,6 +1859,7 @@ name = "skarf"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
+    { name = "pandas" },
     { name = "scikit-learn" },
     { name = "scipy" },
 ]
@@ -1866,8 +1867,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
     { name = "ruff" },
 ]
 doc = [
@@ -1882,11 +1881,18 @@ doc = [
 ]
 pyspi = [
     { name = "pyspi" },
+    { name = "setuptools" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "statsmodels" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = "<2" },
+    { name = "pandas" },
     { name = "scikit-learn", specifier = ">=1.6.0" },
     { name = "scipy" },
 ]
@@ -1894,8 +1900,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pre-commit", specifier = ">=4.1.0" },
-    { name = "pytest", specifier = ">=8.3.5" },
-    { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "ruff", specifier = ">=0.9.10" },
 ]
 doc = [
@@ -1908,7 +1912,15 @@ doc = [
     { name = "sphinx-gallery", specifier = ">=0.19.0" },
     { name = "sphinx-prompt", specifier = ">=1.9.0" },
 ]
-pyspi = [{ name = "pyspi" }]
+pyspi = [
+    { name = "pyspi" },
+    { name = "setuptools" },
+]
+test = [
+    { name = "pytest", specifier = ">=8.3.5" },
+    { name = "pytest-cov", specifier = ">=6.0.0" },
+    { name = "statsmodels", specifier = ">=0.14.4" },
+]
 
 [[package]]
 name = "skrebate"

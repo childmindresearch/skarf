@@ -19,6 +19,7 @@ try:
 
     _PYSPI_AVAILABLE = True
 except ImportError:
+    Data = Any
     _PYSPI_AVAILABLE = False
 
 _logger = logging.getLogger(__name__)
