@@ -1,20 +1,17 @@
 name: docs 
 
 on:
-  push:
-    branches: [ "main", "docs" ]
-  # workflow_run:
-  #   workflows: [CI]
-  #   types:
-  #   - completed
-  #   branches:
-  #   - main
-  #   - docs
+  workflow_run:
+    workflows: [CI]
+    types:
+    - completed
+    branches:
+    - main
 
 jobs:
   # Build the documentation and upload the static HTML files as an artifact.
   build:
-    # if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
