@@ -38,7 +38,9 @@ dependencies = [
 [dependency-groups]
 pyspi = [
     "pyspi",
-    "setuptools",  # pyspi missing pkg_resources dependency (?)
+    # Extra dependency constraints found to be needed.
+    "ipython<9",
+    "setuptools",
 ]
 test = [
     "pytest>=8.3.5",
@@ -51,6 +53,7 @@ dev = [
 ]
 doc = [
     "matplotlib>=3.10.1",
+    "myst-parser>=4.0.1",
     "numpydoc>=1.8.0",
     "pydata-sphinx-theme>=0.16.1",
     "setuptools-scm>=8.2.0",

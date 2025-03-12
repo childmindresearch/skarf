@@ -1,3 +1,5 @@
+"""Abstract base estimator class for VAR models."""
+
 from abc import ABCMeta, abstractmethod
 from numbers import Integral
 from typing import NamedTuple, Self
@@ -46,7 +48,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
     n_features_in_ : int
         Number of features seen during :term:`fit`.
 
-    feature_names_in_ : array of shape (n_features_in_,)
+    feature_names_in_ : array of shape (`n_features_in_`,)
         Names of features seen during `fit`. Defined only when `X` has feature names
         that are all strings.
     """

@@ -1,17 +1,16 @@
+"""A scikit-learn compatible covariance estimator interface for PySPI SPIs."""
+
 import importlib
 import logging
 import yaml
 import traceback
-from importlib import metadata, resources
-from pathlib import Path
-from typing import Any, Literal, Protocol, Self, overload
+from importlib import resources
+from typing import Any, Literal, Protocol, Self, TypeAlias
 
 import numpy as np
 from sklearn.base import BaseEstimator, _fit_context
 from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods
-
-from skarf import get_cache_dir
 
 try:
     import pyspi  # noqa
@@ -19,7 +18,7 @@ try:
 
     _PYSPI_AVAILABLE = True
 except ImportError:
-    Data = Any
+    Data: TypeAlias = Any
     _PYSPI_AVAILABLE = False
 
 _logger = logging.getLogger(__name__)
@@ -28,13 +27,27 @@ _logger = logging.getLogger(__name__)
 # IMO, it would be nice if PySPI provided a way to instantiate individual SPIs. But it
 # seems they do not (see also https://github.com/DynamicsAndNeuralSystems/pyspi/issues/72).
 # So as a workaround we provide this functionality.
-_SPI_CONFIG_MAPS = {}
+_SPI_CONFIG_MAP_CACHE = {}
 
 
 class SPI(Protocol):
     """Abstract minimal interface for PySPI SPI object."""
 
-    def multivariate(self, data: Data) -> np.ndarray: ...
+    def multivariate(self, data: Data) -> np.ndarray:
+        """Compute the matrix of pairwise interaction statistics.
+
+        Parameters
+        ----------
+        data : Data object
+            PySPI Data object representing a multivariate time series of shape
+            (n_features, n_samples).
+
+        Returns
+        -------
+        covariance : ndarray
+            Matrix of pairwise interaction statistics (i.e. generalized covariance) of
+            shape (n_features, n_features).
+        """
 
 
 class SPICovariance(BaseEstimator):
@@ -53,7 +66,7 @@ class SPICovariance(BaseEstimator):
     n_features_in_ : int
         Number of features seen during `fit`.
 
-    feature_names_in_ : array of shape (n_features_in_,)
+    feature_names_in_ : array of shape (`n_features_in_`,)
         Names of features seen during `fit`. Defined only when `X` has feature names
         that are all strings.
 
@@ -108,37 +121,44 @@ class SPICovariance(BaseEstimator):
         return self
 
 
-def is_pyspi_available() -> bool:
-    """Check if PySPI is installed
-
-    https://github.com/DynamicsAndNeuralSystems/pyspi
-    """
-    return _PYSPI_AVAILABLE
-
-
-def _check_is_pyspi_available() -> None:
-    if not is_pyspi_available():
-        raise ModuleNotFoundError(
-            "PySPI required, please install by visiting "
-            "https://github.com/DynamicsAndNeuralSystems/pyspi)"
-        )
-
-
-def _extract_spi_config_map(
+def load_spi_config_map(
     subset: Literal["all", "fast", "sonnet", "fabfour"] = "all",
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Extract a mapping of SPI identifiers to configuration.
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Extract a mapping of SPI identifiers to configuration dicts.
 
-    The configuration for each SPI includes the module name, the SPI function, and the
-    keyword parameters.
+    Parameters
+    ----------
+    subset : {'all', 'fast', 'sonnet', 'fabfour'}, default='full'
+        PySPI config yaml subset.
 
-    Returns the SPI config mapping and a list of any configs that failed to load.
+    Returns
+    -------
+    spi_config_map : dict of str -> dict of str -> value
+        Dictionary mapping SPI identifier names to SPI config dictionaries. Each config
+        dictionary should contain the following keys:
+
+        * 'module_name' : Name of the module where the SPI is defined, relative to\
+            `pyspi`. E.g. `'.statistics.basic'`.
+
+        * 'fcn' : PySPI function name (i.e. class name), e.g. `'Covariance'`.
+
+        * 'params' : Parameters passed through to the PySPI SPI `fcn`, e.g.\
+            `{'estimator': 'EmpiricalCovariance', 'squared': True}`.
+
+    unavailable_spi_configs : list of dict of str -> value
+        List of SPI config dictionaries for unavailable SPIs. SPIs may be unavailable
+        for example because of a missing optional python or system dependency.
     """
     # Nb, this config information is not represented statically in the PySPI package
     # anywhere (as far as I can tell, see also
     # https://github.com/DynamicsAndNeuralSystems/pyspi/issues/72). So we need to
     # extract it dynamically, following the code here:
     # https://github.com/DynamicsAndNeuralSystems/pyspi/blob/v1.1.1/pyspi/calculator.py#L212
+
+    # Nb, using this manual cache bc functools cache messes up the function signature.
+    # https://github.com/python/typeshed/issues/11280
+    if subset in _SPI_CONFIG_MAP_CACHE:
+        return _SPI_CONFIG_MAP_CACHE[subset]
 
     config = _load_pyspi_config_yaml(subset)
 
@@ -175,13 +195,9 @@ def _extract_spi_config_map(
                         {"module_name": module_name, "fcn": fcn, "params": params}
                     )
 
+    _SPI_CONFIG_MAP_CACHE[subset] = spi_config_map, unavailable_spi_configs
+
     return spi_config_map, unavailable_spi_configs
-
-
-def _get_pyspi_version():
-    """Get the installed version of PySPI."""
-    _check_is_pyspi_available()
-    return metadata.version("pyspi")
 
 
 def _load_pyspi_config_yaml(
@@ -194,92 +210,89 @@ def _load_pyspi_config_yaml(
     return config
 
 
-def _get_spi_config_map_path(
+def list_available_spis(
     subset: Literal["all", "fast", "sonnet", "fabfour"] = "all",
-) -> Path:
-    return get_cache_dir() / f"pyspi_spi_config_map_{subset}.yaml"
+) -> list[str]:
+    """List available PySPI SPIs.
+
+    Parameters
+    ----------
+    subset : {'all', 'fast', 'sonnet', 'fabfour'}, default='full'
+        PySPI config yaml subset.
+
+    Returns
+    -------
+    spi_names : list of str
+        List of name identifiers for available SPIs.
+    """
+    spi_config_map, _ = load_spi_config_map(subset=subset)
+    spi_names = list(spi_config_map)
+    return spi_names
 
 
-def load_spi_config_map(
-    subset: Literal["all", "fast", "sonnet", "fabfour"] = "all",
-    cache: bool | None = True,
-) -> dict[str, Any]:
-    """Load PySPI SPI config map, possibly from a cached YAML file."""
-    if cache and subset in _SPI_CONFIG_MAPS:
-        return _SPI_CONFIG_MAPS[subset]
-
-    pyspi_version = _get_pyspi_version()
-    path = _get_spi_config_map_path(subset)
-
-    if cache and path.exists():
-        with path.open() as f:
-            spi_config_map_yaml = yaml.safe_load(f)
-
-        if spi_config_map_yaml["__pyspi_version__"] != pyspi_version:
-            _logger.info(
-                "PySPI SPI config map doesn't match installed PySPI version "
-                f"{pyspi_version}; removing."
-            )
-            path.unlink()
-        else:
-            _logger.info("Loaded PySPI SPI config map from cache: %s", path)
-            spi_config_map = spi_config_map_yaml["configs"]
-            _SPI_CONFIG_MAPS[subset] = spi_config_map
-            return spi_config_map
-
-    spi_config_map, _ = _extract_spi_config_map(subset=subset)
-    _SPI_CONFIG_MAPS[subset] = spi_config_map
-
-    if cache or cache is None:
-        _logger.info("Caching PySPI SPI config map to %s", path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w") as f:
-            spi_config_map_yaml = {
-                "__pyspi_version__": pyspi_version,
-                "configs": spi_config_map,
-            }
-            yaml.safe_dump(spi_config_map_yaml, f)
-
-    return spi_config_map
-
-
-def list_available_spis(subset: Literal["all", "fast", "sonnet", "fabfour"] = "all"):
-    """List available PySPI SPIs."""
-    spi_config_map = load_spi_config_map(subset=subset)
-    return list(spi_config_map)
-
-
-@overload
 def create_spi(name: str) -> SPI:
-    """Create an SPI by name."""
-    ...
+    """Create an SPI by name.
 
+    Parameters
+    ----------
+    spi : str
+        SPI identifier, e.g. `'cov-sq_EmpiricalCovariance'`.
 
-@overload
-def create_spi(module_name: str, fcn: str, **params) -> SPI:
-    """Create an SPI by its module name and function (with params)."""
-    ...
+    Returns
+    -------
+    spifun : `SPI` object.
+        Initialized :class:`SPI` object.
 
-
-def create_spi(*args, **kwargs) -> SPI:
-    if len(args) == 1 and len(kwargs) == 0:
-        return _create_spi_by_name(args[0])
-    elif len(args) == 0 and set(kwargs) == {"name"}:
-        return _create_spi_by_name(kwargs["name"])
-    else:
-        return _create_spi_by_config(*args, **kwargs)
-
-
-def _create_spi_by_name(name: str) -> SPI:
-    spi_config_map = load_spi_config_map()
+    See Also
+    --------
+    list_available_spis : List all identifiers for available SPIs.
+    """
+    spi_config_map, _ = load_spi_config_map()
     config = spi_config_map[name]
     module_name = config["module_name"]
     fcn = config["fcn"]
     params = config.get("params") or {}
-    return _create_spi_by_config(module_name, fcn, **params)
+    return create_spi_from_config(module_name, fcn, **params)
 
 
-def _create_spi_by_config(module_name: str, fcn: str, **params) -> SPI:
+def create_spi_from_config(module_name: str, fcn: str, **params) -> SPI:
+    """Create an SPI by its module name and function (with params).
+
+    Parameters
+    ----------
+    module_name : str
+        Name of the module where the SPI is defined, relative to `pyspi`. E.g.
+        `'.statistics.basic'`.
+
+    fcn : str
+        PySPI function name (i.e. class name), e.g. `'Covariance'`.
+
+    **params : dict of str -> value
+        Parameters passed through to the PySPI SPI `fcn`, e.g. `{'estimator':
+        'EmpiricalCovariance', 'squared': True}`.
+
+    Returns
+    -------
+    spifun : `SPI` object.
+        Initialized :class:`SPI` object.
+
+    See Also
+    --------
+    load_spi_config_map : Load the SPI config map of SPI identifiers to config dicts.
+    """
     module = importlib.import_module(module_name, "pyspi")
     spi = getattr(module, fcn)(**params)
     return spi
+
+
+def is_pyspi_available() -> bool:
+    """Check if PySPI is installed."""
+    return _PYSPI_AVAILABLE
+
+
+def _check_is_pyspi_available() -> None:
+    if not is_pyspi_available():
+        raise ModuleNotFoundError(
+            "PySPI required, please install by visiting "
+            "https://github.com/DynamicsAndNeuralSystems/pyspi)"
+        )
