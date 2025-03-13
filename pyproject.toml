@@ -35,13 +35,15 @@ dependencies = [
     "scipy",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 pyspi = [
     "pyspi",
     # Extra dependency constraints found to be needed.
     "ipython<9",
     "setuptools",
 ]
+
+[dependency-groups]
 test = [
     "pytest>=8.3.5",
     "pytest-cov>=6.0.0",

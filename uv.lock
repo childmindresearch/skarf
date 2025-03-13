@@ -1901,6 +1901,13 @@ dependencies = [
     { name = "scipy" },
 ]
 
+[package.optional-dependencies]
+pyspi = [
+    { name = "ipython" },
+    { name = "pyspi" },
+    { name = "setuptools" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
@@ -1917,11 +1924,6 @@ doc = [
     { name = "sphinx-gallery" },
     { name = "sphinx-prompt" },
 ]
-pyspi = [
-    { name = "ipython" },
-    { name = "pyspi" },
-    { name = "setuptools" },
-]
 test = [
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -1930,11 +1932,15 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ipython", marker = "extra == 'pyspi'", specifier = "<9" },
     { name = "numpy", specifier = "<2" },
     { name = "pandas" },
+    { name = "pyspi", marker = "extra == 'pyspi'" },
     { name = "scikit-learn", specifier = ">=1.6.0" },
     { name = "scipy" },
+    { name = "setuptools", marker = "extra == 'pyspi'" },
 ]
+provides-extras = ["pyspi"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1951,11 +1957,6 @@ doc = [
     { name = "sphinx-design", specifier = ">=0.6.1" },
     { name = "sphinx-gallery", specifier = ">=0.19.0" },
     { name = "sphinx-prompt", specifier = ">=1.9.0" },
-]
-pyspi = [
-    { name = "ipython", specifier = "<9" },
-    { name = "pyspi" },
-    { name = "setuptools" },
 ]
 test = [
     { name = "pytest", specifier = ">=8.3.5" },

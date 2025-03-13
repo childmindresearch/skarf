@@ -19,7 +19,7 @@ jobs:
         with:
           pyproject-file: pyproject.toml
       - name: Install the project
-        run: uv sync --group pyspi --group test
+        run: uv sync --extra pyspi --group test
       - name: Check quality
         run: |
           uv run ruff check skarf tests
