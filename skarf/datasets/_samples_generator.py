@@ -1,9 +1,13 @@
+"""Toy synthetic VAR datasets."""
+
 from numbers import Integral, Real
 
 import numpy as np
 from numpy.random import RandomState
 from sklearn.utils.validation import check_array, check_random_state
 from sklearn.utils._param_validation import Interval, validate_params
+
+DEFAULT_THETA = 2 * np.pi / 60
 
 
 @validate_params(
@@ -20,7 +24,7 @@ from sklearn.utils._param_validation import Interval, validate_params
 def make_spiral(
     n_samples: int,
     init: np.ndarray | None = (1.0, 0.0),
-    theta: float | None = 2 * np.pi / 60,
+    theta: float | None = DEFAULT_THETA,
     dampening: float | None = None,
     noise: float | None = None,
     random_state: int | RandomState | None = None,
@@ -72,7 +76,7 @@ def make_spiral(
 
     if theta is None:
         # Random rates for each pair.
-        theta = rng.uniform(2 * np.pi / 120, 2 * np.pi / 60)
+        theta = rng.uniform(DEFAULT_THETA / 2, DEFAULT_THETA)
 
     A = _rotation_matrix(theta)
     if dampening is not None:

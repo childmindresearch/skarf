@@ -92,3 +92,26 @@ PySPI covariance estimators
    create_spi_from_config
    list_available_spis
    load_spi_config_map
+
+
+Datasets
+========
+
+.. automodule:: skarf.datasets
+    :no-members:
+    :no-inherited-members:
+
+Toy synthetic datasets
+----------------------
+
+.. automodule:: skarf.datasets._samples_generator
+    :no-members:
+    :no-inherited-members:
+
+.. currentmodule:: skarf.datasets
+
+.. autosummary::
+   :toctree: generated/
+   :template: functions.rst
+
+   make_spiral

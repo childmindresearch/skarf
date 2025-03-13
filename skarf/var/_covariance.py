@@ -1,4 +1,7 @@
-"""Adapt a covariance matrix as a linear VAR model via a polynomial fit."""
+"""Adapt a covariance matrix as a linear VAR model via a polynomial fit.
+
+The purpose of this model is to be a baseline comparison with other VAR models.
+"""
 
 from copy import deepcopy
 from numbers import Integral, Real
