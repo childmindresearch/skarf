@@ -72,11 +72,18 @@ def test_covariance_var_ridge(random_data: Data):
     [
         CovarianceVAR(EmpiricalCovariance()),
     ],
-    expected_failed_checks=lambda estimator: {
+)
+def test_sklearn_compatible_estimator(estimator, check):
+    expected_failed_checks = {
         "check_sample_weight_equivalence_on_dense_data": "binary sample weights only",
         "check_sample_weights_list": "binary sample weights only",
         "check_sample_weights_not_overwritten": "binary sample weights only",
-    },
-)
-def test_sklearn_compatible_estimator(estimator, check):
+        "check_sample_weights_invariance": "sample weights are expanded",
+    }
+
+    check_name = check.func.__name__
+    if check_name in expected_failed_checks:
+        msg = expected_failed_checks[check_name]
+        pytest.xfail(msg)
+
     check(estimator)

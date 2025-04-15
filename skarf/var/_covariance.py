@@ -8,7 +8,6 @@ import numpy as np
 from numpy.random import RandomState
 from scipy.linalg import block_diag
 from sklearn.base import MetaEstimatorMixin, clone, _fit_context
-from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods, Interval, StrOptions
 from sklearn.covariance import EmpiricalCovariance
 from sklearn.utils.validation import check_is_fitted
@@ -160,7 +159,7 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         self : object
             Returns the instance itself.
         """
-        X = validate_data(self, X)
+        X = self._validate_data(X)
         X_stride, y_shift, _, sample_weight_shift, _ = _preprocess_data(
             X,
             y=None,

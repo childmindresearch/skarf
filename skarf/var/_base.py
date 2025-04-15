@@ -12,7 +12,6 @@ from sklearn.utils.validation import (
     check_array,
     check_is_fitted,
     check_random_state,
-    validate_data,
     _check_sample_weight,
 )
 from sklearn.utils._param_validation import Interval
@@ -129,7 +128,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
             Next time step predictions, same shape as ``X``.
         """
         check_is_fitted(self)
-        X = validate_data(self, X, reset=False)
+        X = self._validate_data(X, reset=False)
         X_stride = _tstride(X, order=self.order, mode="same")
         return self._predict_strided(X_stride)
 
@@ -168,9 +167,9 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         """
         check_is_fitted(self)
         if y is not None:
-            X, y = validate_data(self, X, y, reset=False, multi_output=True)
+            X, y = self._validate_data(X, y, reset=False, multi_output=True)
         else:
-            X = validate_data(self, X, reset=False)
+            X = self._validate_data(X, reset=False)
 
         X_stride, y_shift, _, sample_weight_shift, _ = _preprocess_data(
             X,
@@ -204,7 +203,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         """
         check_is_fitted(self)
         if X_init is not None:
-            X_init = validate_data(self, X_init, reset=False)
+            X_init = self._validate_data(X_init, reset=False)
 
         if self.coef_.shape[1] != self.coef_.shape[2]:
             raise RuntimeError("Sampling requires n_targets == n_features.")

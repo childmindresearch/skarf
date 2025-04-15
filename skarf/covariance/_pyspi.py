@@ -9,7 +9,6 @@ from typing import Any, Literal, Protocol, Self, TypeAlias
 
 import numpy as np
 from sklearn.base import BaseEstimator, _fit_context
-from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods
 
 from skarf import get_cache_dir
@@ -92,7 +91,7 @@ class SPICovariance(BaseEstimator):
     feature_names_in_: np.ndarray
     """Names of features seen during `fit`. Defined only when `X` has feature names."""
 
-    def __init__(self, spi: str | SPI):
+    def __init__(self, spi: str | SPI = "cov_EmpiricalCovariance"):
         self.spi = spi
 
     @_fit_context(prefer_skip_nested_validation=True)
@@ -115,7 +114,7 @@ class SPICovariance(BaseEstimator):
         """
         _check_is_pyspi_available()
         spi = create_spi(self.spi) if isinstance(self.spi, str) else self.spi
-        X = validate_data(self, X, ensure_min_features=2, ensure_min_samples=2)
+        X = self._validate_data(X, ensure_min_features=2, ensure_min_samples=2)
 
         data = Data(X.T, normalise=False)
         covariance = spi.multivariate(data)

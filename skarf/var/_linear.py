@@ -6,7 +6,6 @@ import numpy as np
 from numpy.random import RandomState
 from sklearn.base import MetaEstimatorMixin, clone, _fit_context
 from sklearn.linear_model._base import LinearModel
-from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods, StrOptions
 
 from ._base import BaseVAR, _preprocess_data
@@ -133,9 +132,9 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
             )
 
         if y is not None:
-            X, y = validate_data(self, X, y, multi_output=True)
+            X, y = self._validate_data(X, y, multi_output=True)
         else:
-            X = validate_data(self, X)
+            X = self._validate_data(X)
 
         X_stride, y_shift, _, sample_weight_shift, groups_shift = _preprocess_data(
             X,

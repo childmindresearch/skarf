@@ -13,7 +13,7 @@ from sklearn.base import (
     clone,
     _fit_context,
 )
-from sklearn.utils.validation import check_is_fitted, check_array, validate_data
+from sklearn.utils.validation import check_is_fitted, check_array
 from sklearn.utils.parallel import Parallel, delayed
 from sklearn.utils._param_validation import HasMethods
 
@@ -97,7 +97,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         X, sample_ids = _check_X_sample_ids(X, sample_ids, unique=True)
         # Check the first sample time series, sets n_features_in_
-        validate_data(self, X[0])
+        self._validate_data(X[0])
         self.estimators_ = self._batch_fit(X, sample_ids=sample_ids, **params)
         return self
 
@@ -138,7 +138,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids, unique=True)
-        validate_data(self, X[0], reset=False)
+        self._validate_data(X[0], reset=False)
 
         for sample_id in sample_ids:
             if sample_id in self.estimators_:
@@ -198,7 +198,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
-        validate_data(self, X[0], reset=False)
+        self._validate_data(X[0], reset=False)
 
         X_pred = []
         for sample_id, X_i in zip(sample_ids, X):
@@ -244,7 +244,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
-        validate_data(self, X[0], reset=False)
+        self._validate_data(X[0], reset=False)
 
         params_values = list(params.values())
         scores, lengths = [], []
@@ -291,7 +291,7 @@ class MultiVAR(TransformerMixin, MetaEstimatorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         X, sample_ids = _check_X_sample_ids(X, sample_ids)
-        validate_data(self, X[0], reset=False)
+        self._validate_data(X[0], reset=False)
 
         for sample_id in sample_ids:
             if sample_id not in self.estimators_:
