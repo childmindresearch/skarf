@@ -12,6 +12,8 @@ from sklearn.base import BaseEstimator, _fit_context
 from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods
 
+from skarf import get_cache_dir
+
 try:
     import pyspi  # noqa
     from pyspi.data import Data
@@ -160,6 +162,18 @@ def load_spi_config_map(
     if subset in _SPI_CONFIG_MAP_CACHE:
         return _SPI_CONFIG_MAP_CACHE[subset]
 
+    spi_config_map_yaml_path = get_cache_dir() / f"spi_config_map_{subset}.yaml"
+
+    if spi_config_map_yaml_path.exists():
+        _logger.info("Loading SPI config map from cache: %s", spi_config_map_yaml_path)
+        with spi_config_map_yaml_path.open() as f:
+            spi_config_map_yaml = yaml.safe_load(f)
+        spi_config_map = spi_config_map_yaml["spi_config_map"]
+        unavailable_spi_configs = spi_config_map_yaml["unavailable_spi_configs"]
+
+        _SPI_CONFIG_MAP_CACHE[subset] = spi_config_map, unavailable_spi_configs
+        return spi_config_map, unavailable_spi_configs
+
     config = _load_pyspi_config_yaml(subset)
 
     spi_config_map = {}
@@ -196,6 +210,17 @@ def load_spi_config_map(
                     )
 
     _SPI_CONFIG_MAP_CACHE[subset] = spi_config_map, unavailable_spi_configs
+
+    _logger.info("Saving SPI config map to cache: %s", spi_config_map_yaml_path)
+    spi_config_map_yaml_path.parent.mkdir(exist_ok=True)
+    with spi_config_map_yaml_path.open("w") as f:
+        yaml.safe_dump(
+            {
+                "spi_config_map": spi_config_map,
+                "unavailable_spi_configs": unavailable_spi_configs,
+            },
+            f,
+        )
 
     return spi_config_map, unavailable_spi_configs
 
@@ -249,13 +274,14 @@ def create_spi(name: str) -> SPI:
     """
     spi_config_map, _ = load_spi_config_map()
     config = spi_config_map[name]
-    module_name = config["module_name"]
-    fcn = config["fcn"]
-    params = config.get("params") or {}
-    return create_spi_from_config(module_name, fcn, **params)
+    return create_spi_from_config(**config)
 
 
-def create_spi_from_config(module_name: str, fcn: str, **params) -> SPI:
+def create_spi_from_config(
+    module_name: str,
+    fcn: str,
+    params: dict[str, Any] | None = None,
+) -> SPI:
     """Create an SPI by its module name and function (with params).
 
     Parameters
@@ -267,7 +293,7 @@ def create_spi_from_config(module_name: str, fcn: str, **params) -> SPI:
     fcn : str
         PySPI function name (i.e. class name), e.g. `'Covariance'`.
 
-    **params : dict of str -> value
+    params : dict of str -> value
         Parameters passed through to the PySPI SPI `fcn`, e.g. `{'estimator':
         'EmpiricalCovariance', 'squared': True}`.
 
@@ -280,6 +306,7 @@ def create_spi_from_config(module_name: str, fcn: str, **params) -> SPI:
     --------
     load_spi_config_map : Load the SPI config map of SPI identifiers to config dicts.
     """
+    params = params or {}
     module = importlib.import_module(module_name, "pyspi")
     spi = getattr(module, fcn)(**params)
     return spi

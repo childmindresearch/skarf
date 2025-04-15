@@ -1,10 +1,12 @@
 import logging
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
 from sklearn.utils.estimator_checks import parametrize_with_checks
 
+from skarf import set_cache_dir
 from skarf.covariance import _pyspi
 
 
@@ -16,36 +18,48 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(scope="module")
+def cache_dir(tmp_path_factory) -> Path:
+    path = tmp_path_factory.mktemp("cache")
+    set_cache_dir(path)
+    return path
+
+
 @pytest.mark.parametrize("subset", ["all", "fast", "sonnet", "fabfour"])
-def test_load_spi_config_map(subset: str):
+def test_load_spi_config_map(subset: str, cache_dir: Path):
     # Extract SPI config map
     spi_config_map, _ = _pyspi.load_spi_config_map(subset)
     assert isinstance(spi_config_map, dict)
     assert "cov_EmpiricalCovariance" in spi_config_map
 
-    # Load from cache
+    # Load from in memory cache
     assert subset in _pyspi._SPI_CONFIG_MAP_CACHE
     spi_config_map2, _ = _pyspi.load_spi_config_map(subset)
     assert spi_config_map == spi_config_map2
 
+    # Load from file cache
+    del _pyspi._SPI_CONFIG_MAP_CACHE[subset]
+    spi_config_map3, _ = _pyspi.load_spi_config_map(subset)
+    assert spi_config_map == spi_config_map3
+
 
 @pytest.mark.parametrize("subset", ["all", "fast", "sonnet", "fabfour"])
-def test_create_spi(subset: str):
+def test_create_spi(subset: str, cache_dir: Path):
     available_spis = _pyspi.list_available_spis(subset)
     for name in available_spis:
         _pyspi.create_spi(name)
 
 
 @pytest.mark.parametrize("subset", ["all", "fast", "sonnet", "fabfour"])
-def test_create_spi_from_config(subset: str):
+def test_create_spi_from_config(subset: str, cache_dir: Path):
     spi_config_map, _ = _pyspi.load_spi_config_map(subset)
     for config in spi_config_map.values():
         _pyspi.create_spi_from_config(
-            config["module_name"], config["fcn"], **config["params"]
+            config["module_name"], config["fcn"], config["params"]
         )
 
 
-def test_spi_covariance():
+def test_spi_covariance(cache_dir: Path):
     rng = np.random.default_rng(42)
     n_samples, n_features = 16, 8
     X = rng.normal(size=(n_samples, n_features))
