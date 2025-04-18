@@ -5,6 +5,7 @@ import logging
 import yaml
 import traceback
 from importlib import resources
+from pathlib import Path
 from typing import Any, Literal, Protocol, Self, TypeAlias
 
 import numpy as np
@@ -16,6 +17,7 @@ from skarf import get_cache_dir
 
 try:
     import pyspi  # noqa
+    import pyspi.utils
     from pyspi.data import Data
 
     _PYSPI_AVAILABLE = True
@@ -30,6 +32,8 @@ _logger = logging.getLogger(__name__)
 # seems they do not (see also https://github.com/DynamicsAndNeuralSystems/pyspi/issues/72).
 # So as a workaround we provide this functionality.
 _SPI_CONFIG_MAP_CACHE = {}
+
+_PYSPI_OPTIONAL_DEPENDENCIES = {}
 
 
 class SPI(Protocol):
@@ -125,6 +129,8 @@ class SPICovariance(BaseEstimator):
 
 def load_spi_config_map(
     subset: Literal["all", "fast", "sonnet", "fabfour"] = "all",
+    cache: bool = True,
+    cache_dir: Path | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
     """Extract a mapping of SPI identifiers to configuration dicts.
 
@@ -132,6 +138,12 @@ def load_spi_config_map(
     ----------
     subset : {'all', 'fast', 'sonnet', 'fabfour'}, default='full'
         PySPI config yaml subset.
+
+    cache : bool, default=True
+        Load/store config map to cache file.
+
+    cache_dir : Path, default=None
+        Optional cache dir to override global package cache dir.
 
     Returns
     -------
@@ -162,9 +174,11 @@ def load_spi_config_map(
     if subset in _SPI_CONFIG_MAP_CACHE:
         return _SPI_CONFIG_MAP_CACHE[subset]
 
-    spi_config_map_yaml_path = get_cache_dir() / f"spi_config_map_{subset}.yaml"
+    if cache_dir is None:
+        cache_dir = get_cache_dir()
+    spi_config_map_yaml_path = cache_dir / f"spi_config_map_{subset}.yaml"
 
-    if spi_config_map_yaml_path.exists():
+    if spi_config_map_yaml_path.exists() and cache:
         _logger.info("Loading SPI config map from cache: %s", spi_config_map_yaml_path)
         with spi_config_map_yaml_path.open() as f:
             spi_config_map_yaml = yaml.safe_load(f)
@@ -211,16 +225,17 @@ def load_spi_config_map(
 
     _SPI_CONFIG_MAP_CACHE[subset] = spi_config_map, unavailable_spi_configs
 
-    _logger.info("Saving SPI config map to cache: %s", spi_config_map_yaml_path)
-    spi_config_map_yaml_path.parent.mkdir(exist_ok=True)
-    with spi_config_map_yaml_path.open("w") as f:
-        yaml.safe_dump(
-            {
-                "spi_config_map": spi_config_map,
-                "unavailable_spi_configs": unavailable_spi_configs,
-            },
-            f,
-        )
+    if cache:
+        _logger.info("Saving SPI config map to cache: %s", spi_config_map_yaml_path)
+        spi_config_map_yaml_path.parent.mkdir(exist_ok=True)
+        with spi_config_map_yaml_path.open("w") as f:
+            yaml.safe_dump(
+                {
+                    "spi_config_map": spi_config_map,
+                    "unavailable_spi_configs": unavailable_spi_configs,
+                },
+                f,
+            )
 
     return spi_config_map, unavailable_spi_configs
 
@@ -306,10 +321,34 @@ def create_spi_from_config(
     --------
     load_spi_config_map : Load the SPI config map of SPI identifiers to config dicts.
     """
+    # Check for java and octave dependencies, and start if necessary.
+    # Nb, only infotheory needs the optional octave and java deps.
+    # Would be nice if the deps were loaded in the module itself.
+
+    # Nb, loading the JVM seems to interfere with the sklearn regularized covariance
+    # SPIs and cause a segfault. So it's worth only loading as needed
+    if module_name == ".statistics.infotheory":
+        load_pyspi_optional_deps()
+
     params = params or {}
     module = importlib.import_module(module_name, "pyspi")
     spi = getattr(module, fcn)(**params)
     return spi
+
+
+def load_pyspi_optional_deps() -> dict[str, bool]:
+    """Load optional PySPI dependencies, if available and not already loaded.
+
+    Returns a mapping of which dependencies are available.
+    """
+    _check_is_pyspi_available()
+
+    if not _PYSPI_OPTIONAL_DEPENDENCIES:
+        deps = pyspi.utils.check_optional_deps()
+        _logger.info("Loaded PySPI optional depedencies: %s", deps)
+        _PYSPI_OPTIONAL_DEPENDENCIES.update(deps)
+
+    return _PYSPI_OPTIONAL_DEPENDENCIES.copy()
 
 
 def is_pyspi_available() -> bool:

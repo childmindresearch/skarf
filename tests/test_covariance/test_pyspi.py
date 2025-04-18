@@ -25,8 +25,16 @@ def cache_dir(tmp_path_factory) -> Path:
     return path
 
 
+@pytest.fixture(scope="module")
+def pyspi_deps() -> dict[str, bool]:
+    # Loading deps necessary for importing some of the modules during config map
+    # extraction.
+    deps = _pyspi.load_pyspi_optional_deps()
+    return deps
+
+
 @pytest.mark.parametrize("subset", ["all", "fast", "sonnet", "fabfour"])
-def test_load_spi_config_map(subset: str, cache_dir: Path):
+def test_load_spi_config_map(subset: str, cache_dir: Path, pyspi_deps: dict[str, bool]):
     # Extract SPI config map
     spi_config_map, _ = _pyspi.load_spi_config_map(subset)
     assert isinstance(spi_config_map, dict)
@@ -44,14 +52,16 @@ def test_load_spi_config_map(subset: str, cache_dir: Path):
 
 
 @pytest.mark.parametrize("subset", ["all", "fast", "sonnet", "fabfour"])
-def test_create_spi(subset: str, cache_dir: Path):
+def test_create_spi(subset: str, cache_dir: Path, pyspi_deps: dict[str, bool]):
     available_spis = _pyspi.list_available_spis(subset)
     for name in available_spis:
         _pyspi.create_spi(name)
 
 
 @pytest.mark.parametrize("subset", ["all", "fast", "sonnet", "fabfour"])
-def test_create_spi_from_config(subset: str, cache_dir: Path):
+def test_create_spi_from_config(
+    subset: str, cache_dir: Path, pyspi_deps: dict[str, bool]
+):
     spi_config_map, _ = _pyspi.load_spi_config_map(subset)
     for config in spi_config_map.values():
         _pyspi.create_spi_from_config(
@@ -59,7 +69,7 @@ def test_create_spi_from_config(subset: str, cache_dir: Path):
         )
 
 
-def test_spi_covariance(cache_dir: Path):
+def test_spi_covariance(cache_dir: Path, pyspi_deps: dict[str, bool]):
     rng = np.random.default_rng(42)
     n_samples, n_features = 16, 8
     X = rng.normal(size=(n_samples, n_features))

@@ -7,4 +7,6 @@ from ._pyspi import (
     create_spi_from_config,
     list_available_spis,
     load_spi_config_map,
+    is_pyspi_available,
+    load_pyspi_optional_deps,
 )
