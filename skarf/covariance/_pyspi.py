@@ -2,8 +2,9 @@
 
 import importlib
 import logging
-import yaml
+import os
 import traceback
+import yaml
 from importlib import resources
 from pathlib import Path
 from typing import Any, Literal, Protocol, Self, TypeAlias
@@ -235,6 +236,7 @@ def load_spi_config_map(
                     "unavailable_spi_configs": unavailable_spi_configs,
                 },
                 f,
+                sort_keys=False,
             )
 
     return spi_config_map, unavailable_spi_configs
@@ -344,11 +346,18 @@ def load_pyspi_optional_deps() -> dict[str, bool]:
     _check_is_pyspi_available()
 
     if not _PYSPI_OPTIONAL_DEPENDENCIES:
+        _append_octave_path()
         deps = pyspi.utils.check_optional_deps()
+
         _logger.info("Loaded PySPI optional depedencies: %s", deps)
         _PYSPI_OPTIONAL_DEPENDENCIES.update(deps)
 
     return _PYSPI_OPTIONAL_DEPENDENCIES.copy()
+
+
+def _append_octave_path():
+    if "octave" not in os.environ["PATH"] and "OCTAVE_PATH" in os.environ:
+        os.environ["PATH"] = f"{os.environ['PATH']}:{os.environ['OCTAVE_PATH']}"
 
 
 def is_pyspi_available() -> bool:
