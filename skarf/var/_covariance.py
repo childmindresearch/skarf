@@ -19,11 +19,11 @@ from ._base import BaseVAR, _preprocess_data
 class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
     """Covariance based VAR model.
 
-    Thsi model fits a linear VAR model parameterized by an underlying covariance matrix.
+    This model fits a linear VAR model parameterized by an underlying covariance matrix.
     The coefficients of the VAR model are represented as a learned polynomial of the
     covariance coefficients::
 
-        A[l] = sum(b[l, i] * C ** (i + 1) for i in range(degree))
+        A[l] = sum(b[l, i] * C ** i for i in range(degree + 1))
 
     for `l = 1, ..., order`, where `C` is the fixed covariance matrix and `b[l, i]` are
     the learned polynomial coefficients.
@@ -82,13 +82,13 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         Fit covariance estimator. If `frozen = True`, then the `estimator` parameter
         must already be fit, and a deep copy is made.
 
-    beta_ : array of shape (order, degree)
+    beta_ : array of shape (order, degree + 1)
         Array of polynomial coefficients.
 
     rank_ : int
         Rank of the polynomial regression design matrix.
 
-    singular_ : array of shape (order * degree,)
+    singular_ : array of shape (order * (degree + 1),)
         Singular values of the design matrix.
     """
 
@@ -104,11 +104,11 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
     estimator_: EmpiricalCovariance
     """Fit covariance estimator."""
     beta_: np.ndarray
-    """Array of polynomial coefficients, shape (order, degree)."""
+    """Array of polynomial coefficients, shape (order, degree + 1)."""
     rank_: int
     """Rank of the polynomial regression design matrix."""
     singular_: np.ndarray
-    """Singular values of the design matrix, shape (order * degree,)"""
+    """Singular values of the design matrix, shape (order * (degree + 1),)"""
 
     def __init__(
         self,
@@ -194,7 +194,9 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         mat = _preprocess_covariance(mat, with_diagonal=self.mode == "full")
 
         # pre-compute polynomial ar terms
-        pow_mats = np.stack([mat**deg for deg in range(1, self.degree + 1)])
+        pow_mats = np.stack([mat**deg for deg in range(self.degree + 1)])
+        np.fill_diagonal(pow_mats[0], 0.0)
+
         A = np.stack(
             [
                 (X_stride[:, step] @ pmat.T).flatten()
@@ -209,13 +211,13 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         # squared norm of each lag ar matrix, so we construct a block diagonal matrix of
         # the component matrices.
         if self.alpha:
-            block = pow_mats.reshape((self.degree, -1)).T
+            block = pow_mats.reshape((self.degree + 1, -1)).T
             ridge_blocks = block_diag(*[block for step in range(self.order)])
             A = np.concatenate([A, np.sqrt(self.alpha) * ridge_blocks])
             b = np.concatenate([b, np.zeros(len(ridge_blocks))])
 
         beta, residuals, rank, singular_values = np.linalg.lstsq(A, b, rcond=-1)
-        beta = beta.reshape((self.order, self.degree))
+        beta = beta.reshape((self.order, self.degree + 1))
         coef = np.einsum("pq,qcd->pcd", beta, pow_mats)
 
         self.estimator_ = estimator
