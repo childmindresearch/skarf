@@ -3,12 +3,15 @@ import pytest
 import sklearn
 from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge, RidgeCV
-from skarf.linear_model._decomp_regression import DecompRegression
 from sklearn.model_selection import LeaveOneGroupOut
+from sklearn.utils.estimator_checks import parametrize_with_checks
+
+from skarf.linear_model._decomp_regression import DecompRegression
 
 
+@pytest.mark.parametrize("transpose", [False, True])
 @pytest.mark.parametrize("routing_enabled", [False, True])
-def test_decomp_regression(routing_enabled: bool):
+def test_decomp_regression(routing_enabled: bool, transpose: bool):
     sklearn.set_config(enable_metadata_routing=routing_enabled)
 
     rng = np.random.default_rng(42)
@@ -23,7 +26,7 @@ def test_decomp_regression(routing_enabled: bool):
     if routing_enabled:
         regression.set_fit_request(sample_weight=True)
 
-    model = DecompRegression(decomposition, regression)
+    model = DecompRegression(decomposition, regression, transpose=transpose)
     model.fit(X, y)
     score = model.score(X, y)
     assert score > 0
@@ -40,7 +43,7 @@ def test_decomp_regression(routing_enabled: bool):
     regression = RidgeCV(cv=LeaveOneGroupOut())
     if routing_enabled:
         regression.set_fit_request(sample_weight=True)
-    model = DecompRegression(decomposition, regression)
+    model = DecompRegression(decomposition, regression, transpose=transpose)
 
     if not routing_enabled:
         with pytest.raises(ValueError):
@@ -48,3 +51,12 @@ def test_decomp_regression(routing_enabled: bool):
     else:
         model.fit(X, y, sample_weight=sample_weight, groups=groups)
         assert not np.allclose(coef, model.coef_)
+
+
+@parametrize_with_checks(
+    [
+        DecompRegression(PCA(), Ridge()),
+    ],
+)
+def test_sklearn_compatible_estimator(estimator, check):
+    check(estimator)

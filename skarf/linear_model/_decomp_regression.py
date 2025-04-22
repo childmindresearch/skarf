@@ -1,5 +1,6 @@
-import numpy as np
+from copy import deepcopy
 
+import numpy as np
 from sklearn.base import MetaEstimatorMixin, RegressorMixin, _fit_context, clone
 from sklearn.decomposition import PCA
 from sklearn.linear_model._base import LinearModel
@@ -11,6 +12,7 @@ from sklearn.utils.metadata_routing import (
     _routing_enabled,
     process_routing,
 )
+from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods
 
 
@@ -28,6 +30,9 @@ class DecompRegression(MetaEstimatorMixin, RegressorMixin, LinearModel):
     regression : estimator
         A regression estimator (e.g., LinearRegression) that implements a `fit` method.
 
+    transpose : bool
+        Apply decomposition to transposed training data, a la spatial ICA.
+
     Attributes
     ----------
     decomposition_ : estimator
@@ -36,8 +41,14 @@ class DecompRegression(MetaEstimatorMixin, RegressorMixin, LinearModel):
     regression_ : estimator
         The fitted regression estimator.
 
+    components_ : ndarray of shape (n_components, n_features)
+        Decomposition components dictionary for representing coefficients.
+
+    beta_ : ndarray of shape (n_components,) or (n_targets, n_components)
+        Regression coefficients with respect to the learned components.
+
     coef_ : ndarray of shape (n_features,) or (n_targets, n_features)
-        The estimated coefficients of the linear model.
+        The full coefficients of the linear model, computed as `beta_ @ components_`.
 
     intercept_ : float or ndarray of shape (n_targets,)
         The intercept of the linear model.
@@ -54,16 +65,28 @@ class DecompRegression(MetaEstimatorMixin, RegressorMixin, LinearModel):
     regression_: PCA
     """Fit linear regression estimator."""
 
+    components_: np.ndarray
+    """Decomposition components dictionary of shape (n_components, n_features)."""
+
+    beta_: np.ndarray
+    """Regression coefficients wrt decomposition of shape (n_components, n_features)."""
+
     coef_: np.ndarray
-    """Linear model coefficients of shape (n_features,) or (n_targets, n_features)."""
+    """Full linear model coefficients of shape (n_targets, n_features)."""
 
     intercept_: np.ndarray | float
     """Linear model intercept, either float or array of shape (n_targets,)."""
 
-    def __init__(self, decomposition: PCA, regression: LinearModel):
+    def __init__(
+        self,
+        decomposition: PCA,
+        regression: LinearModel,
+        transpose: bool = False,
+    ):
         super().__init__()
         self.decomposition = decomposition
         self.regression = regression
+        self.transpose = transpose
 
     @_fit_context(prefer_skip_nested_validation=False)
     def fit(
@@ -96,6 +119,8 @@ class DecompRegression(MetaEstimatorMixin, RegressorMixin, LinearModel):
         """
         _raise_for_params(params, self, "fit")
 
+        X, y = validate_data(self, X, y, multi_output=True)
+
         decomposition = clone(self.decomposition)
         regression = clone(self.regression)
 
@@ -108,13 +133,23 @@ class DecompRegression(MetaEstimatorMixin, RegressorMixin, LinearModel):
             if sample_weight is not None:
                 routed_params.regression.fit["sample_weight"] = sample_weight
 
-        decomposition.fit(X, **routed_params.decomposition.fit)
-        XC = X @ decomposition.components_.T
+        if self.transpose:
+            components = decomposition.fit_transform(
+                X.T, **routed_params.decomposition.fit
+            )
+            components = np.ascontiguousarray(components.T)
+        else:
+            decomposition.fit(X, **routed_params.decomposition.fit)
+            components = decomposition.components_
+
+        XC = X @ components.T
         regression.fit(XC, y, **routed_params.regression.fit)
 
         self.decomposition_ = decomposition
         self.regression_ = regression
-        self.coef_ = regression.coef_ @ decomposition.components_
+        self.components_ = components
+        self.beta_ = regression.coef_
+        self.coef_ = self.beta_ @ self.components_
         self.intercept_ = regression.intercept_
         return self
 
@@ -145,3 +180,11 @@ class DecompRegression(MetaEstimatorMixin, RegressorMixin, LinearModel):
             )
         )
         return router
+
+    def __sklearn_tags__(self):
+        tags = super().__sklearn_tags__()
+        sub_estimator_tags = self.regression.__sklearn_tags__()
+        tags.estimator_type = sub_estimator_tags.estimator_type
+        tags.regressor_tags = deepcopy(sub_estimator_tags.regressor_tags)
+        tags.target_tags = deepcopy(sub_estimator_tags.target_tags)
+        return tags
