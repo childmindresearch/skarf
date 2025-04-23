@@ -85,7 +85,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
     def fit(
         self,
         X: np.ndarray,
-        y: np.ndarray | None = None,
+        y: None = None,
         segments: np.ndarray | None = None,
         sample_weight: np.ndarray | None = None,
         **params,
@@ -99,8 +99,8 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         X : array-like of shape (n_samples, n_features)
             Training multivariate time series.
 
-        y : array-like of shape (n_samples, n_targets,) or (n_samples,) or None
-            Target time series. If `None`, the data itself is used as the target.
+        y : Ignored
+            Not used, present here for API consistency by convention.
 
         segments : array-like of shape (n_samples,)
             Indicator array of contiguous temporal segments in `X`.
@@ -140,7 +140,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
     def score(
         self,
         X: np.ndarray,
-        y: np.ndarray | None = None,
+        y: None = None,
         segments: np.ndarray | None = None,
         sample_weight: np.ndarray | None = None,
     ) -> np.ndarray:
@@ -151,8 +151,8 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         X : array-like of shape (n_samples, n_features)
             Training multivariate time series.
 
-        y : array-like of shape (n_samples, n_targets,) or (n_samples,) or None
-            Target time series. If `None`, the data itself is used as the target.
+        y : Ignored
+            Not used, present here for API consistency by convention.
 
         segments : array-like of shape (n_samples,)
             Indicator array of contiguous temporal segments in `X`.
@@ -167,14 +167,11 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
             Mean VAR prediction score (by default R2, see `scoring_function`).
         """
         check_is_fitted(self)
-        if y is not None:
-            X, y = validate_data(self, X, y, reset=False, multi_output=True)
-        else:
-            X = validate_data(self, X, reset=False)
+        X = validate_data(self, X, reset=False)
 
-        X_stride, y_shift, _, sample_weight_shift, _ = _preprocess_data(
+        X_stride, X_shift, _, sample_weight_shift, _ = _preprocess_data(
             X,
-            y=y,
+            y=None,
             order=self.order,
             lag=self.lag,
             segments=segments,
@@ -182,7 +179,7 @@ class BaseVAR(BaseEstimator, metaclass=ABCMeta):
         )
         X_pred = self._predict_strided(X_stride)
         score = self.scoring_function(
-            y_shift, X_pred, sample_weight=sample_weight_shift
+            X_shift, X_pred, sample_weight=sample_weight_shift
         )
         return score
 
