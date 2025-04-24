@@ -163,7 +163,6 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
             sample_weight=sample_weight,
             groups=groups,
         )
-        n_features = X_stride.shape[-1]
 
         params = {}
         if sample_weight_shift is not None:
@@ -183,30 +182,19 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
             decomposition = components = None
 
         if self.per_target:
-            estimators, coef, intercept = self._fit_per_target(
+            estimators, coef, intercept = self._fit_linear_per_target(
                 X_stride,
                 X_shift,
                 components=components,
                 **params,
             )
         else:
-            estimator, coef, intercept = self._fit_joint(
+            estimator, coef, intercept = self._fit_linear_joint(
                 X_stride,
                 X_shift,
                 components=components,
                 **params,
             )
-
-        # (n_targets, order * n_features) -> (order, n_targets, n_features)
-        coef = coef.reshape(n_features, self.order, -1).swapaxes(0, 1)
-        if components is not None:
-            coef = coef @ components
-
-        # Fill diagonal to zero and rescale coefficients to compensate.
-        coef[:, np.arange(n_features), np.arange(n_features)] = 0.0
-        X_pred = np.einsum("npd,pkd->nk", X_stride, coef)
-        scale = _fit_scale(X_pred, X_shift - intercept, axis=0)
-        coef = scale[None, :, None] * coef
 
         if self.per_target:
             self.estimators_ = estimators
@@ -220,56 +208,88 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
             self.components_ = components
         return self
 
-    def _fit_per_target(
+    def _fit_linear_per_target(
         self,
         X_stride: np.ndarray,
         X_shift: np.ndarray,
         components: np.ndarray | None = None,
         **params,
     ):
-        n_features = X_stride.shape[-1]
+        n_samples, _, n_features = X_stride.shape
 
         estimators = []
         coefs = []
         intercepts = []
+
         for idx in range(n_features):
-            # Zero out the target feature, to prevent model using autocorrelation to
-            # predict.
+            # Zero out target feature, to prevent model relying on autocorrelation
             X_stride_i = X_stride.copy()
             X_stride_i[:, :, idx] = 0
+
             # Project data onto compononents. Equivalently, this constrains the linear
             # regression weights to lie in the span of the components.
             if components is not None:
-                X_stride_i = X_stride_i @ components.T
-            X_stride_flat_i = X_stride_i.reshape(len(X_stride), -1)
+                X_stride_proj_i = X_stride_i @ components.T
+            else:
+                X_stride_proj_i = X_stride_i
+
+            X_stride_flat_i = X_stride_proj_i.reshape(n_samples, -1)
 
             estimator = clone(self.estimator)
             estimator.fit(X_stride_flat_i, X_shift[:, idx], **params)
+
             estimators.append(estimator)
             coefs.append(estimator.coef_)
             intercepts.append(estimator.intercept_)
 
         coef = np.stack(coefs)
-        intercept = np.array(intercepts)
+        intercept = np.array(intercepts).flatten()
         if np.allclose(intercept, 0.0):
             intercept = 0.0
+
+        # (n_targets, order * n_features) -> (order, n_targets, n_features)
+        coef = coef.reshape(n_features, self.order, -1).swapaxes(0, 1)
+        if components is not None:
+            coef = coef @ components
+
+        # Fill diagonal with zero.
+        coef[:, np.arange(n_features), np.arange(n_features)] = 0.0
         return estimators, coef, intercept
 
-    def _fit_joint(
+    def _fit_linear_joint(
         self,
         X_stride: np.ndarray,
         X_shift: np.ndarray,
         components: np.ndarray | None = None,
         **params,
     ):
+        n_samples, _, n_features = X_stride.shape
+
         if components is not None:
-            X_stride = X_stride @ components.T
-        X_stride_flat = X_stride.reshape(len(X_stride), -1)
+            X_stride_proj = X_stride @ components.T
+        else:
+            X_stride_proj = X_stride
+
+        X_stride_flat = X_stride_proj.reshape(n_samples, -1)
 
         estimator = clone(self.estimator)
         estimator.fit(X_stride_flat, X_shift, **params)
+
         coef = estimator.coef_.copy()
         intercept = estimator.intercept_
+
+        # (n_targets, order * n_features) -> (order, n_targets, n_features)
+        coef = coef.reshape(n_features, self.order, -1).swapaxes(0, 1)
+        if components is not None:
+            coef = coef @ components
+
+        # Fill diagonal with zero.
+        coef[:, np.arange(n_features), np.arange(n_features)] = 0.0
+
+        # Rescale coefficients to compensate for lost diagonal.
+        X_pred = np.einsum("npd,pkd->nk", X_stride, coef)
+        scale = _fit_scale(X_pred, X_shift - intercept, axis=0)
+        coef = scale[None, :, None] * coef
         return estimator, coef, intercept
 
     def _predict_strided(self, X_stride: np.ndarray) -> np.ndarray:
