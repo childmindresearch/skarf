@@ -31,8 +31,7 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
     ----------
     estimator : estimator object
         `Covariance` estimator object implementing `fit()` and having a `covariance_`
-        attribute. If the estimator is already fit, will reuse the existing
-        `covariance_` matrix.
+        attribute. If `frozen=True`, the estimator must already be fit.
 
     order : int, default=1
         VAR model order, i.e. the number of past "lags" to include when predicting a
@@ -49,6 +48,9 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
 
     use_precision : bool, default=False
         Use the covariance estimator's precision (inverse covariance) matrix.
+
+    frozen : bool, default=False
+        Reuse a previously fit covariance, rather than re-fit to the current data.
 
     random_state : int, RandomState instance, default=None
         The seed of the pseudo random number generator used when sampling.
@@ -83,6 +85,7 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         "per_target": ["boolean"],
         "degree": [Interval(Integral, 1, None, closed="left")],
         "use_precision": ["boolean"],
+        "frozen": ["boolean"],
     }
 
     estimator_: EmpiricalCovariance
@@ -99,6 +102,7 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         degree: int = 3,
         per_target: bool = False,
         use_precision: bool = False,
+        frozen: bool = False,
         random_state: int | RandomState | None = None,
     ):
         super().__init__(order=order, lag=lag, random_state=random_state)
@@ -106,6 +110,7 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
         self.degree = degree
         self.per_target = per_target
         self.use_precision = use_precision
+        self.frozen = frozen
 
     @_fit_context(prefer_skip_nested_validation=False)
     def fit(
@@ -147,7 +152,11 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
             sample_weight=sample_weight,
         )
 
-        if hasattr(self.estimator, "covariance_"):
+        if self.frozen:
+            if not hasattr(self.estimator, "covariance_"):
+                raise ValueError(
+                    "The input estimator must already be fit when frozen=True."
+                )
             estimator = deepcopy(self.estimator)
             if estimator.covariance_.shape[1] != X.shape[1]:
                 raise ValueError(
@@ -183,9 +192,10 @@ class CovarianceVAR(MetaEstimatorMixin, BaseVAR):
 
         # Polynomial VAR terms
         pow_mats = np.stack([mat**deg for deg in range(self.degree + 1)])
+        # Set constant term diagonal to 0, since 0^0 = 1.
         np.fill_diagonal(pow_mats[0], 0.0)
 
-        # (n_samples, n_features, (order * degree + 1))
+        # (n_samples, n_features, (order * (degree + 1)))
         A = np.stack(
             [
                 X_stride[:, step] @ pmat.T
