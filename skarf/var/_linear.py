@@ -7,6 +7,7 @@ from numpy.random import RandomState
 from sklearn.base import MetaEstimatorMixin, clone, _fit_context
 from sklearn.decomposition import PCA
 from sklearn.linear_model._base import LinearModel
+from sklearn.preprocessing import normalize
 from sklearn.utils.validation import validate_data
 from sklearn.utils._param_validation import HasMethods
 
@@ -178,6 +179,7 @@ class LinearVAR(MetaEstimatorMixin, BaseVAR):
             else:
                 decomposition.fit(X)
                 components = decomposition.components_
+            components = normalize(components)
         else:
             decomposition = components = None
 
