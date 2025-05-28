@@ -4,17 +4,14 @@ import pytest
 import sklearn
 from scipy.spatial.distance import cosine
 from sklearn.decomposition import PCA
-from sklearn.model_selection import LeaveOneGroupOut
-from sklearn.linear_model import LinearRegression, RidgeCV
+from sklearn.model_selection import GridSearchCV, LeaveOneGroupOut
+from sklearn.linear_model import LinearRegression, RidgeCV, Ridge
 from sklearn.utils.estimator_checks import parametrize_with_checks
 from statsmodels.tsa.api import VAR
 
 from skarf.var._linear import LinearVAR, _fit_scale
 
 from tests.conftest import Data
-
-# Needed for RidgeCV groups routing
-sklearn.set_config(enable_metadata_routing=True)
 
 
 @pytest.mark.parametrize("per_target", [False, True])
@@ -108,7 +105,8 @@ def test_linear_var_cv(random_data: Data, order: int, lag: int, per_target: bool
     )
 
     # Check basic fit.
-    var.fit(X, segments=segments, sample_weight=sample_weight, groups=groups)
+    with sklearn.config_context(enable_metadata_routing=True):
+        var.fit(X, segments=segments, sample_weight=sample_weight, groups=groups)
     assert var.coef_.shape == (order, n_features, n_features)
 
     # Check that score works and fit is good.
@@ -159,6 +157,43 @@ def test_linear_var_statsmodels_consistency(random_data: Data):
         [cosine(coef_ref[0, ii], coef[0, ii]) for ii in range(X.shape[-1])]
     )
     assert np.allclose(dists, 0.0)
+
+
+def test_linear_var_gridsearchcv(random_data: Data):
+    X, segments, sample_weight, groups = (
+        random_data.X,
+        random_data.segments,
+        random_data.sample_weight,
+        random_data.groups,
+    )
+    n_samples, n_features = X.shape
+
+    var = GridSearchCV(
+        LinearVAR(Ridge(), decomposition=PCA()),
+        param_grid={
+            "estimator__alpha": [0.1, 1.0],
+            "decomposition__n_components": [2, 4],
+        },
+        cv=LeaveOneGroupOut(),
+    )
+
+    # Metadata routing required to correctly route segments and sample weight to score.
+    # GridSearchCV automatically routes to fit but not score it seems.
+    with sklearn.config_context(enable_metadata_routing=True):
+        var.estimator.set_fit_request(segments=True)
+        var.estimator.set_fit_request(sample_weight=True)
+        var.estimator.set_fit_request(groups=False)
+
+        var.estimator.set_score_request(segments=True)
+        var.estimator.set_score_request(sample_weight=True)
+
+        var.fit(X, segments=segments, sample_weight=sample_weight, groups=groups)
+
+    assert var.best_estimator_.coef_.shape == (1, n_features, n_features)
+
+    # Check that score works and fit is good.
+    score = var.score(X)
+    assert score > 0.9
 
 
 @parametrize_with_checks(
