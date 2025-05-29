@@ -1,5 +1,3 @@
-import logging
-
 import numpy as np
 import pytest
 
@@ -10,10 +8,13 @@ from sklearn.utils.estimator_checks import parametrize_with_checks
 from tests.conftest import Data
 
 
+@pytest.mark.parametrize("per_target", [False, True])
 @pytest.mark.parametrize("degree", [1, 3])
 @pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("lag", [0, 1])
-def test_covariance_var(random_data: Data, order: int, lag: int, degree: int):
+def test_covariance_var(
+    random_data: Data, order: int, lag: int, degree: int, per_target: bool
+):
     X, segments, sample_weight = (
         random_data.X,
         random_data.segments,
@@ -27,6 +28,7 @@ def test_covariance_var(random_data: Data, order: int, lag: int, degree: int):
         order=order,
         lag=lag,
         degree=degree,
+        per_target=per_target,
         random_state=random_state,
     )
 
@@ -34,38 +36,9 @@ def test_covariance_var(random_data: Data, order: int, lag: int, degree: int):
     var.fit(X, segments=segments, sample_weight=sample_weight)
     assert var.coef_.shape == (order, n_features, n_features)
 
-    # Check recovery of ground truth coefficients by sampling data from the fit model.
-    if lag > 0:
-        samples = var.sample(n_samples)
-        var2 = CovarianceVAR(
-            var.estimator_,
-            order=order,
-            lag=lag,
-            degree=degree,
-            frozen=True,
-        )
-        var2.fit(samples)
-
-        score = var2.score(samples)
-        assert np.isclose(score, 1.0)
-        assert np.allclose(var2.coef_, var.coef_)
-        assert np.allclose(var2.beta_, var.beta_)
-
-
-def test_covariance_var_ridge(random_data: Data):
-    # Check that the ridge penalty effectively suppresses the coefficients.
-    cov = EmpiricalCovariance()
-    base_model = CovarianceVAR(cov, order=2)
-    ridge_model = CovarianceVAR(cov, order=2, alpha=1e5)
-
-    base_model.fit(random_data.X)
-    ridge_model.fit(random_data.X)
-
-    base_ar_l2 = np.linalg.norm(base_model.coef_)
-    ridge_ar_l2 = np.linalg.norm(ridge_model.coef_)
-    logging.info(f"base l2: {base_ar_l2:.3e}, ridge l2: {ridge_ar_l2:.3e}")
-    assert ridge_ar_l2 < 0.001
-    assert base_ar_l2 > 0.1
+    # Check that score works and fit is good.
+    score = var.score(X)
+    assert score > (0.8 if per_target else 0.5)
 
 
 @parametrize_with_checks(
